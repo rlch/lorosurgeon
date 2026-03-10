@@ -85,6 +85,50 @@ impl Reconcile for serde_json::Value {
     }
 }
 
+// ── &str ──────────────────────────────────────────────────────────────
+
+impl Reconcile for &str {
+    type Key = NoKey;
+    fn reconcile<R: Reconciler>(&self, r: R) -> Result<(), ReconcileError> {
+        r.str(self)
+    }
+}
+
+// ── &[T] ──────────────────────────────────────────────────────────────
+
+impl<T: Reconcile> Reconcile for &[T] {
+    type Key = NoKey;
+    fn reconcile<R: Reconciler>(&self, r: R) -> Result<(), ReconcileError> {
+        super::list::reconcile_vec(self, r)
+    }
+}
+
+// ── Box<T> ────────────────────────────────────────────────────────────
+
+impl<T: Reconcile> Reconcile for Box<T> {
+    type Key = T::Key;
+    fn reconcile<R: Reconciler>(&self, r: R) -> Result<(), ReconcileError> {
+        (**self).reconcile(r)
+    }
+
+    fn key(&self) -> LoadKey<Self::Key> {
+        (**self).key()
+    }
+}
+
+// ── Cow<'a, T> ────────────────────────────────────────────────────────
+
+impl<'a, T: Reconcile + Clone + 'a> Reconcile for std::borrow::Cow<'a, T> {
+    type Key = T::Key;
+    fn reconcile<R: Reconciler>(&self, r: R) -> Result<(), ReconcileError> {
+        self.as_ref().reconcile(r)
+    }
+
+    fn key(&self) -> LoadKey<Self::Key> {
+        self.as_ref().key()
+    }
+}
+
 // ── Reconcile for &T ────────────────────────────────────────────────────
 
 impl<'b, T: Reconcile + 'b> Reconcile for &'b T {

@@ -8,6 +8,10 @@ description = "Autosurgeon-style derive macros for Loro CRDT containers"
 [lib]
 crate-type = ["rlib"]
 
+[features]
+default = []
+uuid = ["dep:uuid"]
+
 [dependencies]
 loro = "1"
 similar = "2"
@@ -15,6 +19,7 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 lorosurgeon-derive = { path = "../lorosurgeon-derive" }
+uuid = { version = "1", optional = true }
 
 [lints]
 workspace = true

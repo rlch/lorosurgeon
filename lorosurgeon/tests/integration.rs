@@ -1,9 +1,10 @@
 //! Integration tests for lorosurgeon derive macros and core traits.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use loro::LoroDoc;
-use lorosurgeon::{DocSync, Hydrate, MapReconciler, Reconcile, RootReconciler};
+use lorosurgeon::{ByteArray, DocSync, Hydrate, HydrateResultExt, MapReconciler, Reconcile, RootReconciler};
 
 // ── Phase 1: Scalar round-trips ─────────────────────────────────────────
 
@@ -1103,4 +1104,308 @@ fn test_full_featured_struct() {
 
     let hydrated = WhiteboardState::from_doc(&doc).unwrap();
     assert_eq!(hydrated, state);
+}
+
+// ── Gap 1: Box<T> + Cow<'a, T> round-trips ──────────────────────────────
+
+#[test]
+fn test_box_roundtrip() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+
+    // Reconcile a Box<Position>
+    let boxed = Box::new(Position { x: 1.0, y: 2.0 });
+    let reconciler = lorosurgeon::PropReconciler::map_put(map.clone(), "pos".into());
+    boxed.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated: Box<Position> = lorosurgeon::hydrate_prop(&map, "pos").unwrap();
+    assert_eq!(*hydrated, Position { x: 1.0, y: 2.0 });
+}
+
+#[test]
+fn test_cow_roundtrip() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+
+    let cow: Cow<'_, String> = Cow::Owned("hello".to_string());
+    let reconciler = lorosurgeon::PropReconciler::map_put(map.clone(), "s".into());
+    cow.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated: Cow<'_, String> = lorosurgeon::hydrate_prop(&map, "s").unwrap();
+    assert_eq!(&*hydrated, "hello");
+}
+
+// ── Gap 2: &[T] Reconcile ────────────────────────────────────────────────
+
+#[test]
+fn test_slice_reconcile() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+
+    let items: &[i64] = &[1, 2, 3];
+    let reconciler = lorosurgeon::PropReconciler::map_put(map.clone(), "list".into());
+    items.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Hydrate back as Vec
+    let list = match map.get("list").unwrap() {
+        loro::ValueOrContainer::Container(loro::Container::List(l)) => l,
+        _ => panic!("expected list"),
+    };
+    let result: Vec<i64> = lorosurgeon::hydrate::impls::hydrate_vec_from_list(&list).unwrap();
+    assert_eq!(result, vec![1, 2, 3]);
+}
+
+// ── Gap 5: MapReconciler::entries() ──────────────────────────────────────
+
+#[test]
+fn test_map_reconciler_entries() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+
+    map.insert("a", 1i64).unwrap();
+    map.insert("b", 2i64).unwrap();
+    doc.commit();
+
+    let mr = MapReconciler { map: map.clone() };
+    let entries: HashMap<String, i64> = mr
+        .entries()
+        .map(|(k, voc)| {
+            let v: i64 = lorosurgeon::Hydrate::hydrate(&voc).unwrap();
+            (k, v)
+        })
+        .collect();
+
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries["a"], 1);
+    assert_eq!(entries["b"], 2);
+}
+
+// ── Gap 6: HydrateResultExt::strip_unexpected() ─────────────────────────
+
+#[test]
+fn test_strip_unexpected_ok() {
+    let result: Result<i64, lorosurgeon::HydrateError> = Ok(42);
+    assert_eq!(result.strip_unexpected().unwrap(), Some(42));
+}
+
+#[test]
+fn test_strip_unexpected_converts_unexpected() {
+    let result: Result<i64, lorosurgeon::HydrateError> =
+        Err(lorosurgeon::HydrateError::unexpected("int", "string"));
+    assert_eq!(result.strip_unexpected().unwrap(), None);
+}
+
+#[test]
+fn test_strip_unexpected_propagates_other_errors() {
+    let result: Result<i64, lorosurgeon::HydrateError> =
+        Err(lorosurgeon::HydrateError::missing("field"));
+    assert!(result.strip_unexpected().is_err());
+}
+
+// ── Gap 7: ByteArray<N> round-trip ───────────────────────────────────────
+
+#[test]
+fn test_byte_array_roundtrip() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+
+    let arr = ByteArray::new([0xDE, 0xAD, 0xBE, 0xEF]);
+    let reconciler = lorosurgeon::PropReconciler::map_put(map.clone(), "hash".into());
+    arr.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated: ByteArray<4> = lorosurgeon::hydrate_prop(&map, "hash").unwrap();
+    assert_eq!(hydrated, arr);
+}
+
+#[test]
+fn test_byte_array_wrong_length() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+
+    // Store 4 bytes
+    let arr = ByteArray::new([1, 2, 3, 4]);
+    let reconciler = lorosurgeon::PropReconciler::map_put(map.clone(), "data".into());
+    arr.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Try to hydrate as 8-byte array — should fail
+    let result: Result<ByteArray<8>, _> = lorosurgeon::hydrate_prop(&map, "data");
+    assert!(result.is_err());
+}
+
+// ── Gap 8: &str Reconcile ────────────────────────────────────────────────
+
+#[test]
+fn test_str_ref_reconcile() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+
+    let s: &str = "hello world";
+    let reconciler = lorosurgeon::PropReconciler::map_put(map.clone(), "msg".into());
+    s.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated: String = lorosurgeon::hydrate_prop(&map, "msg").unwrap();
+    assert_eq!(hydrated, "hello world");
+}
+
+// ── Gap 3: Enum key type generation ──────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+enum KeyedShape {
+    Circle {
+        #[key]
+        id: String,
+        radius: f64,
+    },
+    Rectangle {
+        #[key]
+        id: String,
+        width: f64,
+        height: f64,
+    },
+    Point,
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct KeyedShapeContainer {
+    #[loro(movable)]
+    shapes: Vec<KeyedShape>,
+}
+
+#[test]
+fn test_enum_key_basic_roundtrip() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = KeyedShapeContainer {
+        shapes: vec![
+            KeyedShape::Circle { id: "c1".into(), radius: 5.0 },
+            KeyedShape::Rectangle { id: "r1".into(), width: 10.0, height: 20.0 },
+            KeyedShape::Point,
+        ],
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = KeyedShapeContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v1);
+}
+
+#[test]
+fn test_enum_key_reorder_preserves_identity() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = KeyedShapeContainer {
+        shapes: vec![
+            KeyedShape::Circle { id: "c1".into(), radius: 5.0 },
+            KeyedShape::Rectangle { id: "r1".into(), width: 10.0, height: 20.0 },
+        ],
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Reverse order and update values
+    let v2 = KeyedShapeContainer {
+        shapes: vec![
+            KeyedShape::Rectangle { id: "r1".into(), width: 30.0, height: 40.0 },
+            KeyedShape::Circle { id: "c1".into(), radius: 15.0 },
+        ],
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = KeyedShapeContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v2);
+}
+
+#[test]
+fn test_enum_key_insert_delete() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = KeyedShapeContainer {
+        shapes: vec![
+            KeyedShape::Circle { id: "c1".into(), radius: 5.0 },
+            KeyedShape::Circle { id: "c2".into(), radius: 10.0 },
+        ],
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Remove c1, add r1
+    let v2 = KeyedShapeContainer {
+        shapes: vec![
+            KeyedShape::Circle { id: "c2".into(), radius: 10.0 },
+            KeyedShape::Rectangle { id: "r1".into(), width: 5.0, height: 5.0 },
+        ],
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = KeyedShapeContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v2);
+}
+
+// ── Gap 4: Flexible HashMap keys ─────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct MyId(String);
+
+impl From<String> for MyId {
+    fn from(s: String) -> Self {
+        MyId(s)
+    }
+}
+
+impl std::fmt::Display for MyId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[test]
+fn test_flexible_hashmap_keys() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+    let inner = map.get_or_create_container("data", loro::LoroMap::new()).unwrap();
+
+    inner.insert("key1", "value1").unwrap();
+    inner.insert("key2", "value2").unwrap();
+    doc.commit();
+
+    // Hydrate with custom key type
+    let result: HashMap<MyId, String> = lorosurgeon::hydrate_keyed_map(&inner).unwrap();
+    assert_eq!(result.len(), 2);
+    assert_eq!(result[&MyId("key1".into())], "value1");
+    assert_eq!(result[&MyId("key2".into())], "value2");
+
+    // Reconcile back using reconcile_keyed_map
+    let new_map: HashMap<MyId, String> = [(MyId("key1".into()), "updated".into())].into();
+    let reconciler = lorosurgeon::PropReconciler::map_put(map.clone(), "data2".into());
+    lorosurgeon::reconcile_keyed_map(&new_map, reconciler).unwrap();
+    doc.commit();
+
+    let inner2 = match map.get("data2").unwrap() {
+        loro::ValueOrContainer::Container(loro::Container::Map(m)) => m,
+        _ => panic!("expected map"),
+    };
+    let result2: HashMap<MyId, String> = lorosurgeon::hydrate_keyed_map(&inner2).unwrap();
+    assert_eq!(result2.len(), 1);
+    assert_eq!(result2[&MyId("key1".into())], "updated");
 }

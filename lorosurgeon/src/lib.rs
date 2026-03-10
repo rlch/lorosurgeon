@@ -7,6 +7,7 @@ pub mod error;
 pub mod hydrate;
 pub mod reconcile;
 
+pub mod byte_array;
 pub mod doc_sync;
 pub mod maybe_missing;
 pub mod text;
@@ -23,9 +24,10 @@ pub use crate::reconcile::{
 };
 
 // Re-export error types
-pub use crate::error::{HydrateError, ReconcileError};
+pub use crate::error::{HydrateError, HydrateResultExt, ReconcileError};
 
 // Re-export special types
+pub use crate::byte_array::ByteArray;
 pub use crate::maybe_missing::MaybeMissing;
 pub use crate::text::Text;
 
@@ -36,7 +38,8 @@ pub use crate::hydrate::{
 };
 
 // Re-export vec helpers for derive macro codegen
-pub use crate::hydrate::impls::{hydrate_vec_from_list, hydrate_vec_from_movable_list};
+pub use crate::hydrate::impls::{hydrate_keyed_map, hydrate_vec_from_list, hydrate_vec_from_movable_list};
 
 // Re-export list reconcile helpers for derive macro codegen
 pub use crate::reconcile::list::{reconcile_vec, reconcile_vec_movable};
+pub use crate::reconcile::map::reconcile_keyed_map;

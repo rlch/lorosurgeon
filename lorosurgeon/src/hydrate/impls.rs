@@ -232,6 +232,124 @@ fn hydrate_string_map<V: Hydrate, M: FromIterator<(String, V)>>(
         .collect()
 }
 
+// ── HashMap<K, V> with K: From<String> ────────────────────────────────
+
+/// Hydrate a HashMap with non-String keys that implement `From<String>`.
+pub fn hydrate_keyed_map<K, V>(map: &LoroMap) -> Result<HashMap<K, V>, HydrateError>
+where
+    K: From<String> + Eq + std::hash::Hash,
+    V: Hydrate,
+{
+    let mut pairs = Vec::new();
+    map.for_each(|key, voc| {
+        pairs.push((key.to_string(), voc));
+    });
+    pairs
+        .into_iter()
+        .map(|(k, voc)| V::hydrate(&voc).map(|v| (K::from(k), v)))
+        .collect()
+}
+
+// ── Box<T> ────────────────────────────────────────────────────────────
+
+impl<T: Hydrate> Hydrate for Box<T> {
+    fn hydrate(source: &ValueOrContainer) -> Result<Self, HydrateError> {
+        T::hydrate(source).map(Box::new)
+    }
+
+    fn hydrate_value(value: &LoroValue) -> Result<Self, HydrateError> {
+        T::hydrate_value(value).map(Box::new)
+    }
+
+    fn hydrate_map(map: &LoroMap) -> Result<Self, HydrateError> {
+        T::hydrate_map(map).map(Box::new)
+    }
+
+    fn hydrate_list(list: &LoroList) -> Result<Self, HydrateError> {
+        T::hydrate_list(list).map(Box::new)
+    }
+
+    fn hydrate_movable_list(list: &LoroMovableList) -> Result<Self, HydrateError> {
+        T::hydrate_movable_list(list).map(Box::new)
+    }
+
+    fn hydrate_text(text: &loro::LoroText) -> Result<Self, HydrateError> {
+        T::hydrate_text(text).map(Box::new)
+    }
+
+    fn hydrate_null() -> Result<Self, HydrateError> {
+        T::hydrate_null().map(Box::new)
+    }
+
+    fn hydrate_bool(b: bool) -> Result<Self, HydrateError> {
+        T::hydrate_bool(b).map(Box::new)
+    }
+
+    fn hydrate_i64(i: i64) -> Result<Self, HydrateError> {
+        T::hydrate_i64(i).map(Box::new)
+    }
+
+    fn hydrate_f64(f: f64) -> Result<Self, HydrateError> {
+        T::hydrate_f64(f).map(Box::new)
+    }
+
+    fn hydrate_string(s: &str) -> Result<Self, HydrateError> {
+        T::hydrate_string(s).map(Box::new)
+    }
+
+    fn hydrate_binary(b: &[u8]) -> Result<Self, HydrateError> {
+        T::hydrate_binary(b).map(Box::new)
+    }
+}
+
+// ── Cow<'a, T> ────────────────────────────────────────────────────────
+
+impl<T: Hydrate + Clone> Hydrate for std::borrow::Cow<'_, T> {
+    fn hydrate(source: &ValueOrContainer) -> Result<Self, HydrateError> {
+        T::hydrate(source).map(std::borrow::Cow::Owned)
+    }
+
+    fn hydrate_value(value: &LoroValue) -> Result<Self, HydrateError> {
+        T::hydrate_value(value).map(std::borrow::Cow::Owned)
+    }
+
+    fn hydrate_map(map: &LoroMap) -> Result<Self, HydrateError> {
+        T::hydrate_map(map).map(std::borrow::Cow::Owned)
+    }
+
+    fn hydrate_list(list: &LoroList) -> Result<Self, HydrateError> {
+        T::hydrate_list(list).map(std::borrow::Cow::Owned)
+    }
+
+    fn hydrate_movable_list(list: &LoroMovableList) -> Result<Self, HydrateError> {
+        T::hydrate_movable_list(list).map(std::borrow::Cow::Owned)
+    }
+
+    fn hydrate_null() -> Result<Self, HydrateError> {
+        T::hydrate_null().map(std::borrow::Cow::Owned)
+    }
+
+    fn hydrate_bool(b: bool) -> Result<Self, HydrateError> {
+        T::hydrate_bool(b).map(std::borrow::Cow::Owned)
+    }
+
+    fn hydrate_i64(i: i64) -> Result<Self, HydrateError> {
+        T::hydrate_i64(i).map(std::borrow::Cow::Owned)
+    }
+
+    fn hydrate_f64(f: f64) -> Result<Self, HydrateError> {
+        T::hydrate_f64(f).map(std::borrow::Cow::Owned)
+    }
+
+    fn hydrate_string(s: &str) -> Result<Self, HydrateError> {
+        T::hydrate_string(s).map(std::borrow::Cow::Owned)
+    }
+
+    fn hydrate_binary(b: &[u8]) -> Result<Self, HydrateError> {
+        T::hydrate_binary(b).map(std::borrow::Cow::Owned)
+    }
+}
+
 // ── serde_json::Value ───────────────────────────────────────────────────
 
 impl Hydrate for serde_json::Value {

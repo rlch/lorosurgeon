@@ -38,6 +38,23 @@ impl HydrateError {
     }
 }
 
+/// Extension trait for `Result<T, HydrateError>`.
+pub trait HydrateResultExt<T> {
+    /// Convert `Unexpected` errors to `None`, propagating all other errors.
+    /// Useful for trying multiple type interpretations.
+    fn strip_unexpected(self) -> Result<Option<T>, HydrateError>;
+}
+
+impl<T> HydrateResultExt<T> for Result<T, HydrateError> {
+    fn strip_unexpected(self) -> Result<Option<T>, HydrateError> {
+        match self {
+            Ok(v) => Ok(Some(v)),
+            Err(HydrateError::Unexpected { .. }) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ReconcileError {
     #[error(transparent)]

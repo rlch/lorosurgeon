@@ -56,6 +56,15 @@ impl MapReconciler {
     pub fn is_empty(&self) -> bool {
         self.map.len() == 0
     }
+
+    /// Iterate over (key, value) entries in the map.
+    pub fn entries(&self) -> impl Iterator<Item = (String, ValueOrContainer)> {
+        let mut entries = Vec::new();
+        self.map.for_each(|key, voc| {
+            entries.push((key.to_string(), voc));
+        });
+        entries.into_iter()
+    }
 }
 
 // ── HashMap / BTreeMap Reconcile ────────────────────────────────────────
@@ -77,6 +86,28 @@ impl<V: Reconcile> Reconcile for HashMap<String, V> {
         m.retain(|k| new_keys.contains(k))?;
         Ok(())
     }
+}
+
+/// Reconcile a HashMap<K, V> where K converts to string keys.
+/// Used by derive macros and custom reconciliation for non-String key maps.
+pub fn reconcile_keyed_map<K, V, R>(
+    map: &HashMap<K, V>,
+    r: R,
+) -> Result<(), ReconcileError>
+where
+    K: std::fmt::Display + Eq + std::hash::Hash,
+    V: Reconcile,
+    R: Reconciler,
+{
+    let mut m = r.map()?;
+    for (key, value) in map {
+        let key_str = key.to_string();
+        m.entry(&key_str, value)?;
+    }
+    let new_keys: std::collections::HashSet<String> =
+        map.keys().map(|k| k.to_string()).collect();
+    m.retain(|k| new_keys.contains(k))?;
+    Ok(())
 }
 
 impl<V: Reconcile> Reconcile for BTreeMap<String, V> {
