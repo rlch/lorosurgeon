@@ -1,29 +1,23 @@
 # lorosurgeon
 
-Derive macros for [Loro](https://loro.dev) CRDT containers. Inspired by [autosurgeon](https://github.com/automerge/autosurgeon) for Automerge.
+Derive macros for [Loro](https://loro.dev) CRDT containers. The Loro equivalent of [autosurgeon](https://github.com/automerge/autosurgeon) for Automerge.
 
-Two derive macros — `Hydrate` and `Reconcile` — generate idiomatic serialization and deserialization between Rust types and Loro containers, with full CRDT granularity.
-
-## Quick Start
+`#[derive(Hydrate, Reconcile)]` generates field-level serialization between Rust types and Loro containers — only modified fields produce CRDT operations.
 
 ```rust
 use loro::LoroDoc;
 use lorosurgeon::{Hydrate, Reconcile, DocSync};
 
-#[derive(Debug, PartialEq, Hydrate, Reconcile)]
+#[derive(Hydrate, Reconcile)]
 #[loro(root = "config")]
 struct Config {
     name: String,
     version: i64,
     position: Position,
-    tags: Vec<String>,
 }
 
-#[derive(Debug, PartialEq, Hydrate, Reconcile)]
-struct Position {
-    x: f64,
-    y: f64,
-}
+#[derive(Hydrate, Reconcile)]
+struct Position { x: f64, y: f64 }
 
 let doc = LoroDoc::new();
 
@@ -31,79 +25,88 @@ let config = Config {
     name: "hello".into(),
     version: 1,
     position: Position { x: 10.0, y: 20.0 },
-    tags: vec!["a".into(), "b".into()],
 };
 
-// Write to Loro document
-config.to_doc(&doc).unwrap();
+config.to_doc(&doc).unwrap();  // Rust → Loro
 doc.commit();
 
-// Read back
-let loaded = Config::from_doc(&doc).unwrap();
+let loaded = Config::from_doc(&doc).unwrap();  // Loro → Rust
 assert_eq!(loaded, config);
 ```
 
-Each struct field maps to a key in a `LoroMap`. Nested structs become nested maps. Changes are written at field granularity — only modified fields produce CRDT operations.
+## Derives
 
-## Type Mappings
+**`Hydrate`** reads Rust values from Loro containers. **`Reconcile`** writes Rust values into Loro containers with minimal operations.
 
-| Rust Type | Loro Storage | Notes |
-|-----------|-------------|-------|
+| Rust Type | Loro Storage |
+|-----------|-------------|
+| Named struct | `LoroMap` (fields → keys) |
+| Newtype struct | Transparent (delegates to inner) |
+| Tuple struct | `LoroList` (positional) |
+| Unit enum | `String` (variant name) |
+| Data enum | `LoroMap` (`{ "Variant": data }`) |
+
+## Scalars
+
+| Rust | Loro | Notes |
+|------|------|-------|
 | `bool` | `Bool` | |
-| `i8`–`i64`, `u8`–`u64` | `I64` | Overflow checked on hydration |
+| `i8`–`i64`, `u8`–`u64`, `usize` | `I64` | Overflow checked on hydration |
 | `f32`, `f64` | `Double` | |
 | `String`, `&str` | `String` | |
 | `Vec<u8>` | `Binary` | Special-cased |
-| `Vec<T>` | `LoroList` | Clear + rewrite |
-| `Vec<T>` with `#[loro(movable)]` | `LoroMovableList` | Keyed LCS diffing, move-aware |
 | `Option<T>` | `Null` / T | |
-| `HashMap<String, V>` | `LoroMap` | Stale keys auto-deleted |
-| `Box<T>`, `Cow<'a, T>` | (transparent) | Delegates to inner type |
-| Named struct | `LoroMap` | Fields → keys |
-| Newtype struct | (transparent) | Delegates to inner |
-| Tuple struct | `LoroList` | Positional |
-| Unit enum | `String` | Variant name |
-| Data enum | `LoroMap` | `{ "Variant": data }` |
+| `Box<T>`, `Cow<'a, T>`, `&T` | Transparent | Delegates to inner |
+| `serde_json::Value` | `String` | JSON-serialized |
 
-### Special Types
+## Collections
 
-| Type | Loro Container | Behavior |
-|------|---------------|----------|
-| `Text` | `LoroText` | LCS-diffed text (Loro's built-in `update()`) |
-| `ByteArray<N>` | `Binary` | Fixed-size binary with compile-time length check |
-| `MaybeMissing<T>` | Null / T | Distinguishes "key absent" from "key present" (unlike `Option`) |
+| Rust | Loro | Strategy |
+|------|------|----------|
+| `Vec<T>` | `LoroList` | Clear + rewrite |
+| `Vec<T>` + `#[loro(movable)]` | `LoroMovableList` | Keyed LCS diffing with `mov()`/`set()` |
+| `HashMap<String, V>` | `LoroMap` | Put entries, delete stale keys |
+| `BTreeMap<String, V>` | `LoroMap` | Same |
 
-## Field Attributes
+## Special Types
 
-```rust
-#[derive(Hydrate, Reconcile)]
-struct Example {
-    #[key]                          // Identity key for list diffing
-    id: String,
+| Type | Loro | Behavior |
+|------|------|----------|
+| `Text` | `LoroText` | LCS-diffed via Loro's built-in `update()` |
+| `ByteArray<N>` | `Binary` | Fixed-size, length checked on hydration |
+| `MaybeMissing<T>` | Null / T | Distinguishes "absent key" from "present" (unlike `Option`) |
 
-    #[loro(rename = "pos")]         // Different key name in Loro
-    position: Position,
+## Attributes
 
-    #[loro(json)]                   // serde_json round-trip (coarse fallback)
-    theme: Theme,
+### Container
 
-    #[loro(movable)]                // LoroMovableList with keyed LCS
-    items: Vec<Item>,
+| Attribute | Effect |
+|-----------|--------|
+| `#[loro(root = "key")]` | Generate `DocSync` impl — `to_doc()`/`from_doc()` at named root |
 
-    #[loro(missing)]                // Default::default() when key absent
-    count: i32,
+### Field
 
-    #[loro(missing = "default_name")] // Custom function when absent
-    name: String,
-
-    #[loro(flatten)]                // Inline nested struct fields into parent map
-    canvas: CanvasPosition,
-}
-```
+| Attribute | Effect |
+|-----------|--------|
+| `#[key]` | Identity key for list diffing |
+| `#[loro(rename = "name")]` | Use different key name in Loro |
+| `#[loro(json)]` | serde_json round-trip (coarse-grained fallback) |
+| `#[loro(movable)]` | Use `LoroMovableList` instead of `LoroList` |
+| `#[loro(missing)]` | `Default::default()` when key absent |
+| `#[loro(missing = "fn")]` | Custom function when key absent |
+| `#[loro(flatten)]` | Inline nested struct fields into parent map |
+| `#[loro(with = "module")]` | Custom hydrate + reconcile module |
+| `#[loro(hydrate = "fn")]` | Custom hydrate function |
+| `#[loro(reconcile = "fn")]` | Custom reconcile function |
 
 ## Keyed List Diffing
 
-For `LoroMovableList`, items with `#[key]` fields are matched by identity across reconciliation. Matched items are updated in-place with `set()` (preserving CRDT element identity), new items are `insert()`ed, removed items are `delete()`d, and reordered items use `mov()`.
+`#[loro(movable)]` + `#[key]` enables identity-preserving list reconciliation on `LoroMovableList`:
+
+- **Matched items** → `set()` in-place (preserves CRDT element identity)
+- **New items** → `insert()`
+- **Removed items** → `delete()`
+- **Reordered items** → `mov()`
 
 ```rust
 #[derive(Hydrate, Reconcile)]
@@ -120,78 +123,47 @@ struct Doc {
 }
 ```
 
-This enables concurrent field-level edits within list items to merge correctly — two peers can edit different fields of the same item and both changes are preserved.
+Two peers editing different fields of the same item merge correctly — `set()` preserves the container identity so field-level changes compose.
 
 ### Enum Keys
 
-Enums with `#[key]` fields in any variant automatically generate a companion key type for list diffing:
+Enums with `#[key]` on any variant generate a companion key type automatically:
 
 ```rust
 #[derive(Hydrate, Reconcile)]
 enum Shape {
-    Circle {
-        #[key]
-        id: String,
-        radius: f64,
-    },
-    Rectangle {
-        #[key]
-        id: String,
-        width: f64,
-        height: f64,
-    },
-    Point,  // No key — matches by variant name
+    Circle { #[key] id: String, radius: f64 },
+    Rectangle { #[key] id: String, width: f64, height: f64 },
+    Point,  // Matches by variant name
 }
 ```
 
-## DocSync — Document-Level Round-Trip
+## Optimizations
 
-`#[loro(root = "key")]` generates a `DocSync` impl for writing to/from a `LoroDoc`:
+**No-op detection** — reconciling identical values produces zero CRDT operations. The reconciler reads existing values before writing and skips unchanged fields.
 
-```rust
-#[derive(Hydrate, Reconcile)]
-#[loro(root = "whiteboard")]
-struct WhiteboardState {
-    name: String,
-    elements: Vec<Element>,
-}
-
-// Generated:
-// impl DocSync for WhiteboardState {
-//     const ROOT_KEY: &'static str = "whiteboard";
-// }
-
-let doc = LoroDoc::new();
-state.to_doc(&doc)?;
-let loaded = WhiteboardState::from_doc(&doc)?;
-```
-
-## Stale Heads Detection
-
-`VersionGuard` captures a document's version before hydration and detects concurrent modifications:
+**Stale heads detection** — `VersionGuard` captures a document's version vector and detects concurrent modifications before write-back:
 
 ```rust
 let guard = VersionGuard::capture(&doc);
 let mut state = MyState::from_doc(&doc)?;
 state.name = "updated".into();
-guard.check(&doc)?;  // Fails if doc was modified concurrently
+guard.check(&doc)?;  // Err(StaleHeads) if doc was modified
 state.to_doc(&doc)?;
 doc.commit();
 ```
 
-## No-Op Detection
+## Cargo Features
 
-Reconciling identical values produces zero CRDT operations — the `PropReconciler` reads the existing value before writing and skips if unchanged. This prevents unnecessary history bloat.
-
-## Features
-
-- `uuid` — `Hydrate`/`Reconcile` impls for `uuid::Uuid` (stored as 16-byte binary)
+| Feature | Effect |
+|---------|--------|
+| `uuid` | `Hydrate`/`Reconcile` for `uuid::Uuid` (16-byte binary) |
 
 ## Crate Structure
 
 ```
 lorosurgeon/          # Core traits, type impls, special types
-lorosurgeon-derive/   # Proc macros (#[derive(Hydrate, Reconcile)])
+lorosurgeon-derive/   # Proc macros
 ```
 
 ## License
