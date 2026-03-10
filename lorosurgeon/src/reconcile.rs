@@ -121,7 +121,14 @@ impl PropReconciler {
     fn put_value(self, value: impl Into<LoroValue>) -> Result<(), ReconcileError> {
         match self.action {
             PropAction::MapPut { map, key } => {
-                map.insert(&key, value)?;
+                let new_value = value.into();
+                // No-op detection: skip write if existing value is identical.
+                if let Some(ValueOrContainer::Value(existing)) = map.get(&key) {
+                    if existing == new_value {
+                        return Ok(());
+                    }
+                }
+                map.insert(&key, new_value)?;
             }
             PropAction::ListInsert { list, index } => {
                 list.insert(index, value)?;
@@ -130,7 +137,14 @@ impl PropReconciler {
                 list.insert(index, value)?;
             }
             PropAction::MovableListSet { list, index } => {
-                list.set(index, value)?;
+                let new_value = value.into();
+                // No-op detection: skip write if existing value is identical.
+                if let Some(ValueOrContainer::Value(existing)) = list.get(index) {
+                    if existing == new_value {
+                        return Ok(());
+                    }
+                }
+                list.set(index, new_value)?;
             }
         }
         Ok(())

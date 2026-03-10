@@ -935,6 +935,67 @@ fn test_movable_list_nonempty_to_empty() {
     assert_eq!(hydrated.items.len(), 0);
 }
 
+// ── No-op detection ─────────────────────────────────────────────────────
+
+#[test]
+fn test_noop_detection_no_history_bloat() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let state = Position { x: 10.0, y: 20.0 };
+
+    // First write
+    let reconciler = RootReconciler::new(map.clone());
+    state.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let version_after_first = doc.oplog_vv();
+
+    // Second write — identical values, should be no-op
+    let reconciler = RootReconciler::new(map.clone());
+    state.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let version_after_second = doc.oplog_vv();
+
+    // Version vectors should be identical (no new operations created)
+    assert_eq!(
+        version_after_first, version_after_second,
+        "Reconciling identical values should not create new CRDT operations"
+    );
+}
+
+#[test]
+fn test_noop_detection_partial_change() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let state1 = Position { x: 10.0, y: 20.0 };
+    let reconciler = RootReconciler::new(map.clone());
+    state1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let version_after_first = doc.oplog_vv();
+
+    // Only change y — x should be skipped
+    let state2 = Position { x: 10.0, y: 30.0 };
+    let reconciler = RootReconciler::new(map.clone());
+    state2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let version_after_second = doc.oplog_vv();
+
+    // Should have new ops (y changed), but fewer than if both were written
+    assert_ne!(
+        version_after_first, version_after_second,
+        "Changed values should create new CRDT operations"
+    );
+
+    // Verify correct values
+    let hydrated = Position::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, state2);
+}
+
 // ── Phase 10: Struct with all features combined ─────────────────────────
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default)]
