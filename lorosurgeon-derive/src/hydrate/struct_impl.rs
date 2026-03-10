@@ -1,0 +1,212 @@
+//! Hydrate derive for structs.
+
+use proc_macro2::TokenStream;
+use quote::quote;
+use syn::{DataStruct, DeriveInput, Fields, Ident};
+
+use crate::attrs::{FieldAttrs, MissingStrategy};
+
+pub fn derive_hydrate_struct(
+    input: &DeriveInput,
+    data: &DataStruct,
+) -> syn::Result<TokenStream> {
+    let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let hydrate_body = match &data.fields {
+        Fields::Named(fields) => derive_named_struct(name, fields)?,
+        Fields::Unnamed(fields) => derive_tuple_struct(name, fields)?,
+        Fields::Unit => derive_unit_struct(name)?,
+    };
+
+    Ok(quote! {
+        impl #impl_generics lorosurgeon::Hydrate for #name #ty_generics #where_clause {
+            #hydrate_body
+        }
+    })
+}
+
+fn derive_named_struct(
+    name: &Ident,
+    fields: &syn::FieldsNamed,
+) -> syn::Result<TokenStream> {
+    let mut field_hydrations = Vec::new();
+    let mut flatten_fields = Vec::new();
+
+    for field in &fields.named {
+        let field_name = field.ident.as_ref().unwrap();
+        let attrs = FieldAttrs::from_attrs(&field.attrs)?;
+        let loro_key = attrs.loro_key(&field_name.to_string());
+        let field_ty = &field.ty;
+
+        if attrs.flatten {
+            // Flattened fields are handled by delegating to the inner type's hydrate_map
+            // but we need to inline them. We'll generate a separate hydration.
+            flatten_fields.push((field_name.clone(), field_ty.clone()));
+            continue;
+        }
+
+        let hydration = if let Some(ref module) = attrs.with_module {
+            let mod_path: syn::Path = syn::parse_str(module)?;
+            quote! {
+                #field_name: #mod_path::hydrate(map, #loro_key)?,
+            }
+        } else if let Some(ref func) = attrs.custom_hydrate {
+            let func_path: syn::Path = syn::parse_str(func)?;
+            quote! {
+                #field_name: #func_path(map, #loro_key)?,
+            }
+        } else if attrs.json {
+            match &attrs.missing {
+                Some(MissingStrategy::Default) => quote! {
+                    #field_name: lorosurgeon::hydrate_prop_json_or_default(map, #loro_key)?,
+                },
+                Some(MissingStrategy::Function(f)) => {
+                    let func_path: syn::Path = syn::parse_str(f)?;
+                    quote! {
+                        #field_name: lorosurgeon::hydrate_prop_json_or_default(map, #loro_key)
+                            .unwrap_or_else(|_| #func_path()),
+                    }
+                }
+                None => quote! {
+                    #field_name: lorosurgeon::hydrate_prop_json(map, #loro_key)?,
+                },
+            }
+        } else {
+            match &attrs.missing {
+                Some(MissingStrategy::Default) => quote! {
+                    #field_name: lorosurgeon::hydrate_prop_or_default(map, #loro_key)?,
+                },
+                Some(MissingStrategy::Function(f)) => {
+                    let func_path: syn::Path = syn::parse_str(f)?;
+                    quote! {
+                        #field_name: lorosurgeon::hydrate_prop_or_else(map, #loro_key, #func_path)?,
+                    }
+                }
+                None => {
+                    // Check if the type is Option — it handles missing naturally
+                    if is_option_type(field_ty) {
+                        quote! {
+                            #field_name: lorosurgeon::hydrate_prop_or_default(map, #loro_key)?,
+                        }
+                    } else {
+                        quote! {
+                            #field_name: lorosurgeon::hydrate_prop(map, #loro_key)?,
+                        }
+                    }
+                }
+            }
+        };
+
+        field_hydrations.push(hydration);
+    }
+
+    // Handle flattened fields
+    for (field_name, field_ty) in &flatten_fields {
+        field_hydrations.push(quote! {
+            #field_name: <#field_ty as lorosurgeon::Hydrate>::hydrate_map(map)?,
+        });
+    }
+
+    Ok(quote! {
+        fn hydrate_map(map: &loro::LoroMap) -> Result<Self, lorosurgeon::HydrateError> {
+            Ok(#name {
+                #(#field_hydrations)*
+            })
+        }
+    })
+}
+
+fn derive_tuple_struct(
+    name: &Ident,
+    fields: &syn::FieldsUnnamed,
+) -> syn::Result<TokenStream> {
+    if fields.unnamed.len() == 1 {
+        // Newtype — transparent delegation
+        let inner_ty = &fields.unnamed[0].ty;
+        Ok(quote! {
+            fn hydrate(source: &loro::ValueOrContainer) -> Result<Self, lorosurgeon::HydrateError> {
+                <#inner_ty as lorosurgeon::Hydrate>::hydrate(source).map(#name)
+            }
+
+            fn hydrate_map(map: &loro::LoroMap) -> Result<Self, lorosurgeon::HydrateError> {
+                <#inner_ty as lorosurgeon::Hydrate>::hydrate_map(map).map(#name)
+            }
+
+            fn hydrate_value(value: &loro::LoroValue) -> Result<Self, lorosurgeon::HydrateError> {
+                <#inner_ty as lorosurgeon::Hydrate>::hydrate_value(value).map(#name)
+            }
+
+            fn hydrate_list(list: &loro::LoroList) -> Result<Self, lorosurgeon::HydrateError> {
+                <#inner_ty as lorosurgeon::Hydrate>::hydrate_list(list).map(#name)
+            }
+
+            fn hydrate_null() -> Result<Self, lorosurgeon::HydrateError> {
+                <#inner_ty as lorosurgeon::Hydrate>::hydrate_null().map(#name)
+            }
+
+            fn hydrate_bool(b: bool) -> Result<Self, lorosurgeon::HydrateError> {
+                <#inner_ty as lorosurgeon::Hydrate>::hydrate_bool(b).map(#name)
+            }
+
+            fn hydrate_i64(i: i64) -> Result<Self, lorosurgeon::HydrateError> {
+                <#inner_ty as lorosurgeon::Hydrate>::hydrate_i64(i).map(#name)
+            }
+
+            fn hydrate_f64(f: f64) -> Result<Self, lorosurgeon::HydrateError> {
+                <#inner_ty as lorosurgeon::Hydrate>::hydrate_f64(f).map(#name)
+            }
+
+            fn hydrate_string(s: &str) -> Result<Self, lorosurgeon::HydrateError> {
+                <#inner_ty as lorosurgeon::Hydrate>::hydrate_string(s).map(#name)
+            }
+
+            fn hydrate_binary(b: &[u8]) -> Result<Self, lorosurgeon::HydrateError> {
+                <#inner_ty as lorosurgeon::Hydrate>::hydrate_binary(b).map(#name)
+            }
+        })
+    } else {
+        // Tuple struct with 2+ fields — use LoroList positionally
+        let field_count = fields.unnamed.len();
+        let field_hydrations: Vec<_> = fields
+            .unnamed
+            .iter()
+            .enumerate()
+            .map(|(i, f)| {
+                let ty = &f.ty;
+                quote! {
+                    lorosurgeon::hydrate_list_item::<#ty>(list, #i)?
+                }
+            })
+            .collect();
+
+        Ok(quote! {
+            fn hydrate_list(list: &loro::LoroList) -> Result<Self, lorosurgeon::HydrateError> {
+                if list.len() != #field_count {
+                    return Err(lorosurgeon::HydrateError::unexpected(
+                        concat!("list of length ", stringify!(#field_count)),
+                        "list of different length",
+                    ));
+                }
+                Ok(#name(#(#field_hydrations),*))
+            }
+        })
+    }
+}
+
+fn derive_unit_struct(name: &Ident) -> syn::Result<TokenStream> {
+    Ok(quote! {
+        fn hydrate_null() -> Result<Self, lorosurgeon::HydrateError> {
+            Ok(#name)
+        }
+    })
+}
+
+/// Check if a type is `Option<...>`.
+fn is_option_type(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(type_path) = ty {
+        if let Some(segment) = type_path.path.segments.last() {
+            return segment.ident == "Option";
+        }
+    }
+    false
+}

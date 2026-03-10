@@ -1,0 +1,20 @@
+[package]
+name = "lorosurgeon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Autosurgeon-style derive macros for Loro CRDT containers"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+loro = "1"
+similar = "2"
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+lorosurgeon-derive = { path = "../lorosurgeon-derive" }
+
+[lints]
+workspace = true

@@ -1,0 +1,698 @@
+//! Integration tests for lorosurgeon derive macros and core traits.
+
+use std::collections::HashMap;
+
+use loro::LoroDoc;
+use lorosurgeon::{DocSync, Hydrate, MapReconciler, Reconcile, RootReconciler};
+
+// ── Phase 1: Scalar round-trips ─────────────────────────────────────────
+
+#[test]
+fn test_scalar_roundtrip_bool() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+
+    map.insert("v", true).unwrap();
+    doc.commit();
+
+    let result: bool = lorosurgeon::hydrate_prop(&map, "v").unwrap();
+    assert_eq!(result, true);
+}
+
+#[test]
+fn test_scalar_roundtrip_i64() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+
+    map.insert("v", 42i64).unwrap();
+    doc.commit();
+
+    let result: i64 = lorosurgeon::hydrate_prop(&map, "v").unwrap();
+    assert_eq!(result, 42);
+}
+
+#[test]
+fn test_scalar_roundtrip_f64() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+
+    map.insert("v", 3.14f64).unwrap();
+    doc.commit();
+
+    let result: f64 = lorosurgeon::hydrate_prop(&map, "v").unwrap();
+    assert!((result - 3.14).abs() < f64::EPSILON);
+}
+
+#[test]
+fn test_scalar_roundtrip_string() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+
+    map.insert("v", "hello").unwrap();
+    doc.commit();
+
+    let result: String = lorosurgeon::hydrate_prop(&map, "v").unwrap();
+    assert_eq!(result, "hello");
+}
+
+#[test]
+fn test_scalar_roundtrip_option_none() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+    doc.commit();
+
+    let result: Option<String> = lorosurgeon::hydrate_prop_or_default(&map, "v").unwrap();
+    assert_eq!(result, None);
+}
+
+#[test]
+fn test_scalar_roundtrip_option_some() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+
+    map.insert("v", "world").unwrap();
+    doc.commit();
+
+    let result: Option<String> = lorosurgeon::hydrate_prop(&map, "v").unwrap();
+    assert_eq!(result, Some("world".to_string()));
+}
+
+#[test]
+fn test_integer_overflow() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+
+    map.insert("v", 300i64).unwrap();
+    doc.commit();
+
+    let result = lorosurgeon::hydrate_prop::<u8>(&map, "v");
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_i64_as_f64() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+
+    map.insert("v", 42i64).unwrap();
+    doc.commit();
+
+    let result: f64 = lorosurgeon::hydrate_prop(&map, "v").unwrap();
+    assert_eq!(result, 42.0);
+}
+
+// ── Phase 2: Reconcile scalars into map ─────────────────────────────────
+
+#[test]
+fn test_reconcile_scalars_into_map() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("test");
+
+    let mut mr = MapReconciler { map: map.clone() };
+    mr.entry("name", &"Alice".to_string()).unwrap();
+    mr.entry("age", &30i64).unwrap();
+    mr.entry("active", &true).unwrap();
+    mr.entry("score", &95.5f64).unwrap();
+    doc.commit();
+
+    assert_eq!(
+        lorosurgeon::hydrate_prop::<String>(&map, "name").unwrap(),
+        "Alice"
+    );
+    assert_eq!(
+        lorosurgeon::hydrate_prop::<i64>(&map, "age").unwrap(),
+        30
+    );
+    assert_eq!(
+        lorosurgeon::hydrate_prop::<bool>(&map, "active").unwrap(),
+        true
+    );
+    assert_eq!(
+        lorosurgeon::hydrate_prop::<f64>(&map, "score").unwrap(),
+        95.5
+    );
+}
+
+// ── Phase 3: Derive macros — structs ────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct Position {
+    x: f64,
+    y: f64,
+}
+
+#[test]
+fn test_derive_simple_struct() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+    let pos = Position { x: 10.0, y: 20.0 };
+
+    let reconciler = RootReconciler::new(map.clone());
+    pos.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = Position::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, pos);
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct ResourceMeta {
+    #[loro(missing)]
+    id: String,
+    name: String,
+    description: Option<String>,
+    #[loro(missing)]
+    forkable: bool,
+}
+
+#[test]
+fn test_derive_struct_with_options_and_missing() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let meta = ResourceMeta {
+        id: "abc".to_string(),
+        name: "Test".to_string(),
+        description: Some("A test resource".to_string()),
+        forkable: true,
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    meta.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = ResourceMeta::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, meta);
+}
+
+#[test]
+fn test_derive_struct_missing_fields_use_defaults() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    // Only write the required field
+    map.insert("name", "Test").unwrap();
+    doc.commit();
+
+    let hydrated = ResourceMeta::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated.id, ""); // Default for String
+    assert_eq!(hydrated.name, "Test");
+    assert_eq!(hydrated.description, None); // Option defaults to None
+    assert_eq!(hydrated.forkable, false); // Default for bool
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct Nested {
+    pos: Position,
+    label: String,
+}
+
+#[test]
+fn test_derive_nested_struct() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let nested = Nested {
+        pos: Position { x: 1.0, y: 2.0 },
+        label: "origin".to_string(),
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    nested.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = Nested::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, nested);
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct Wrapper(String);
+
+#[test]
+fn test_derive_newtype_struct() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = Wrapper("hello".to_string());
+    map.insert("w", "hello").unwrap();
+    doc.commit();
+
+    let hydrated: Wrapper = lorosurgeon::hydrate_prop(&map, "w").unwrap();
+    assert_eq!(hydrated, val);
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+#[loro(root = "config")]
+struct Config {
+    version: i64,
+    name: String,
+}
+
+#[test]
+fn test_derive_doc_sync() {
+    let doc = LoroDoc::new();
+
+    let config = Config {
+        version: 1,
+        name: "test-doc".to_string(),
+    };
+
+    config.to_doc(&doc).unwrap();
+    doc.commit();
+
+    let hydrated = Config::from_doc(&doc).unwrap();
+    assert_eq!(hydrated, config);
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct WithRename {
+    #[loro(rename = "pos_x")]
+    x: f64,
+    #[loro(rename = "pos_y")]
+    y: f64,
+}
+
+#[test]
+fn test_derive_rename() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = WithRename { x: 1.0, y: 2.0 };
+    let reconciler = RootReconciler::new(map.clone());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Verify the actual keys in Loro
+    let x: f64 = lorosurgeon::hydrate_prop(&map, "pos_x").unwrap();
+    let y: f64 = lorosurgeon::hydrate_prop(&map, "pos_y").unwrap();
+    assert_eq!(x, 1.0);
+    assert_eq!(y, 2.0);
+
+    let hydrated = WithRename::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, val);
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default)]
+struct Theme {
+    primary: String,
+    font_size: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct WithJson {
+    name: String,
+    #[loro(json, missing)]
+    theme: Theme,
+}
+
+#[test]
+fn test_derive_json_attribute() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = WithJson {
+        name: "test".to_string(),
+        theme: Theme {
+            primary: "blue".to_string(),
+            font_size: 14,
+        },
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = WithJson::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, val);
+}
+
+// ── Phase 4: Derive macros — enums ──────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+#[test]
+fn test_derive_unit_enum() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    map.insert("color", "Green").unwrap();
+    doc.commit();
+
+    let hydrated: Color = lorosurgeon::hydrate_prop(&map, "color").unwrap();
+    assert_eq!(hydrated, Color::Green);
+
+    // Round-trip via reconcile
+    let mut mr = MapReconciler { map: map.clone() };
+    mr.entry("color2", &Color::Blue).unwrap();
+    doc.commit();
+
+    let hydrated2: Color = lorosurgeon::hydrate_prop(&map, "color2").unwrap();
+    assert_eq!(hydrated2, Color::Blue);
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+enum Shape {
+    Circle { radius: f64 },
+    Rectangle { width: f64, height: f64 },
+    Point,
+}
+
+#[test]
+fn test_derive_mixed_enum_named_variant() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let shape = Shape::Circle { radius: 5.0 };
+    let reconciler = RootReconciler::new(map.clone());
+    shape.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = Shape::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, shape);
+}
+
+#[test]
+fn test_derive_mixed_enum_unit_variant() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let shape = Shape::Point;
+    let reconciler = RootReconciler::new(map.clone());
+    shape.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = Shape::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, shape);
+}
+
+#[test]
+fn test_derive_mixed_enum_switch_variant() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    // Write Circle first
+    let shape1 = Shape::Circle { radius: 5.0 };
+    let reconciler = RootReconciler::new(map.clone());
+    shape1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Overwrite with Rectangle — should clean up Circle key
+    let shape2 = Shape::Rectangle {
+        width: 10.0,
+        height: 20.0,
+    };
+    let reconciler = RootReconciler::new(map.clone());
+    shape2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = Shape::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, shape2);
+
+    // Verify Circle key is gone
+    assert!(map.get("Circle").is_none());
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+enum Value {
+    Int(i64),
+    Text(String),
+    Pair(i64, String),
+}
+
+#[test]
+fn test_derive_tuple_enum_single() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = Value::Int(42);
+    let reconciler = RootReconciler::new(map.clone());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = Value::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, val);
+}
+
+#[test]
+fn test_derive_tuple_enum_multi() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = Value::Pair(7, "lucky".to_string());
+    let reconciler = RootReconciler::new(map.clone());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = Value::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, val);
+}
+
+// ── Phase 5: HashMap round-trip ─────────────────────────────────────────
+
+#[test]
+fn test_hashmap_roundtrip() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let mut data: HashMap<String, i64> = HashMap::new();
+    data.insert("a".to_string(), 1);
+    data.insert("b".to_string(), 2);
+    data.insert("c".to_string(), 3);
+
+    let mut mr = MapReconciler { map: map.clone() };
+    mr.entry("data", &data).unwrap();
+    doc.commit();
+
+    let hydrated: HashMap<String, i64> = lorosurgeon::hydrate_prop(&map, "data").unwrap();
+    assert_eq!(hydrated, data);
+}
+
+#[test]
+fn test_hashmap_update_removes_old_keys() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    // First write
+    let mut data1: HashMap<String, i64> = HashMap::new();
+    data1.insert("a".to_string(), 1);
+    data1.insert("b".to_string(), 2);
+    let mut mr = MapReconciler { map: map.clone() };
+    mr.entry("data", &data1).unwrap();
+    doc.commit();
+
+    // Second write — removes "b", adds "c"
+    let mut data2: HashMap<String, i64> = HashMap::new();
+    data2.insert("a".to_string(), 10);
+    data2.insert("c".to_string(), 3);
+    let mut mr = MapReconciler { map: map.clone() };
+    mr.entry("data", &data2).unwrap();
+    doc.commit();
+
+    let hydrated: HashMap<String, i64> = lorosurgeon::hydrate_prop(&map, "data").unwrap();
+    assert_eq!(hydrated, data2);
+}
+
+// ── Phase 6: Text type ──────────────────────────────────────────────────
+
+#[test]
+fn test_text_roundtrip() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let text = lorosurgeon::Text::new("Hello, world!");
+    let mut mr = MapReconciler { map: map.clone() };
+    mr.entry("content", &text).unwrap();
+    doc.commit();
+
+    let hydrated: lorosurgeon::Text = lorosurgeon::hydrate_prop(&map, "content").unwrap();
+    assert_eq!(hydrated, text);
+}
+
+// ── Phase 7: MaybeMissing ───────────────────────────────────────────────
+
+#[test]
+fn test_maybe_missing_absent() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let result: lorosurgeon::MaybeMissing<String> =
+        lorosurgeon::hydrate_prop_or_default(&map, "nonexistent").unwrap();
+    assert!(result.is_missing());
+}
+
+#[test]
+fn test_maybe_missing_present() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    map.insert("name", "Alice").unwrap();
+    doc.commit();
+
+    let result: lorosurgeon::MaybeMissing<String> =
+        lorosurgeon::hydrate_prop(&map, "name").unwrap();
+    assert_eq!(
+        result,
+        lorosurgeon::MaybeMissing::Present("Alice".to_string())
+    );
+}
+
+// ── Phase 8: Concurrent edits (CRDT verification) ───────────────────────
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+#[loro(root = "data")]
+struct CrdtStruct {
+    name: String,
+    value: i64,
+    active: bool,
+}
+
+#[test]
+fn test_concurrent_field_edits_merge() {
+    let doc1 = LoroDoc::new();
+    let initial = CrdtStruct {
+        name: "initial".to_string(),
+        value: 0,
+        active: false,
+    };
+    initial.to_doc(&doc1).unwrap();
+    doc1.commit();
+
+    // Fork
+    let bytes = doc1.export(loro::ExportMode::snapshot()).unwrap();
+    let doc2 = LoroDoc::new();
+    doc2.import_batch(&[bytes.into()]).unwrap();
+
+    // doc1: update name
+    {
+        let updated = CrdtStruct {
+            name: "updated-by-1".to_string(),
+            value: 0,
+            active: false,
+        };
+        updated.to_doc(&doc1).unwrap();
+        doc1.commit();
+    }
+
+    // doc2: update value and active
+    {
+        let updated = CrdtStruct {
+            name: "initial".to_string(),
+            value: 42,
+            active: true,
+        };
+        updated.to_doc(&doc2).unwrap();
+        doc2.commit();
+    }
+
+    // Merge
+    let update1 = doc1.export(loro::ExportMode::all_updates()).unwrap();
+    let update2 = doc2.export(loro::ExportMode::all_updates()).unwrap();
+
+    let merged = LoroDoc::new();
+    merged
+        .import_batch(&[update1.into(), update2.into()])
+        .unwrap();
+
+    let result = CrdtStruct::from_doc(&merged).unwrap();
+    // Both changes should be present (last-writer-wins per field)
+    assert_eq!(result.value, 42);
+    assert_eq!(result.active, true);
+    // name is LWW — one of the two values wins
+    assert!(
+        result.name == "updated-by-1" || result.name == "initial",
+        "name should be one of the two values"
+    );
+}
+
+// ── Phase 9: Flatten ────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct CanvasPosition {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct Element {
+    id: String,
+    #[loro(flatten)]
+    canvas: CanvasPosition,
+}
+
+#[test]
+fn test_derive_flatten() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let elem = Element {
+        id: "e1".to_string(),
+        canvas: CanvasPosition {
+            x: 10.0,
+            y: 20.0,
+            width: 100.0,
+            height: 50.0,
+        },
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    elem.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Verify flattened keys exist directly on the map
+    let x: f64 = lorosurgeon::hydrate_prop(&map, "x").unwrap();
+    assert_eq!(x, 10.0);
+
+    let hydrated = Element::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, elem);
+}
+
+// ── Phase 10: Struct with all features combined ─────────────────────────
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default)]
+struct StyleConfig {
+    color: String,
+    opacity: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+#[loro(root = "whiteboard")]
+struct WhiteboardState {
+    #[loro(missing)]
+    id: String,
+    name: String,
+    #[loro(rename = "desc")]
+    description: Option<String>,
+    #[loro(json, missing)]
+    style: StyleConfig,
+    #[loro(flatten)]
+    position: Position,
+}
+
+#[test]
+fn test_full_featured_struct() {
+    let doc = LoroDoc::new();
+
+    let state = WhiteboardState {
+        id: "wb-1".to_string(),
+        name: "My Whiteboard".to_string(),
+        description: Some("A test whiteboard".to_string()),
+        style: StyleConfig {
+            color: "red".to_string(),
+            opacity: 0.8,
+        },
+        position: Position { x: 100.0, y: 200.0 },
+    };
+
+    state.to_doc(&doc).unwrap();
+    doc.commit();
+
+    let hydrated = WhiteboardState::from_doc(&doc).unwrap();
+    assert_eq!(hydrated, state);
+}
