@@ -63,7 +63,7 @@ pub fn reconcile_movable_list<T: Reconcile>(
     let old_len = list_r.len();
 
     // Check if items have keys
-    let has_keys = items.first().map_or(false, |item| {
+    let has_keys = items.first().is_some_and(|item| {
         !matches!(item.key(), LoadKey::NoKey)
     });
 
@@ -81,8 +81,8 @@ fn reconcile_positional<T: Reconcile>(
     old_len: usize,
 ) -> Result<(), ReconcileError> {
     let overlap = old_len.min(items.len());
-    for i in 0..overlap {
-        list_r.set(i, &items[i])?;
+    for (i, item) in items[..overlap].iter().enumerate() {
+        list_r.set(i, item)?;
     }
 
     // Remove extras from the end
@@ -91,8 +91,10 @@ fn reconcile_positional<T: Reconcile>(
     }
 
     // Append new items
-    for i in old_len..items.len() {
-        list_r.insert(i, &items[i])?;
+    if items.len() > old_len {
+        for (i, item) in items[old_len..].iter().enumerate() {
+            list_r.insert(old_len + i, item)?;
+        }
     }
 
     Ok(())
@@ -138,7 +140,7 @@ fn reconcile_keyed<T: Reconcile>(
     for new_key in &new_keys {
         let matched = new_key.as_ref().and_then(|nk| {
             (0..old_len).find(|&i| {
-                !old_used[i] && old_keys[i].as_ref().map_or(false, |ok| ok == nk)
+                !old_used[i] && (old_keys[i].as_ref() == Some(nk))
             })
         });
 

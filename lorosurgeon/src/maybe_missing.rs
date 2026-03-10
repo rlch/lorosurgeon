@@ -12,7 +12,9 @@ use crate::reconcile::{NoKey, Reconcile, Reconciler};
 /// `MaybeMissing<T>` only returns `Missing` when the key is truly absent.
 /// A null value would attempt to hydrate `T` and may error.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default)]
 pub enum MaybeMissing<T> {
+    #[default]
     Missing,
     Present(T),
 }
@@ -51,11 +53,6 @@ impl<T> MaybeMissing<T> {
     }
 }
 
-impl<T: Default> Default for MaybeMissing<T> {
-    fn default() -> Self {
-        MaybeMissing::Missing
-    }
-}
 
 impl<T: Hydrate> Hydrate for MaybeMissing<T> {
     fn hydrate(source: &ValueOrContainer) -> Result<Self, HydrateError> {
@@ -108,7 +105,7 @@ impl<T: Reconcile> Reconcile for MaybeMissing<T> {
 
     fn reconcile<R: Reconciler>(&self, r: R) -> Result<(), ReconcileError> {
         match self {
-            MaybeMissing::Missing => r.null().map_err(Into::into),
+            MaybeMissing::Missing => r.null(),
             MaybeMissing::Present(v) => v.reconcile(r),
         }
     }

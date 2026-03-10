@@ -98,7 +98,7 @@ fn derive_named_struct(
             let vec_inner = extract_vec_inner_type(field_ty);
             let is_vec_non_u8 = vec_inner
                 .as_ref()
-                .map_or(false, |inner| !is_u8_type(inner));
+                .is_some_and(|inner| !is_u8_type(inner));
 
             if is_vec_non_u8 {
                 let inner = vec_inner.unwrap();

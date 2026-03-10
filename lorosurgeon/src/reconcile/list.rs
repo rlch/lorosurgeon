@@ -46,7 +46,7 @@ pub fn reconcile_vec<T: Reconcile, R: Reconciler>(
     let mut list_r = r.list()?;
 
     // Clear existing items
-    while list_r.len() > 0 {
+    while !list_r.is_empty() {
         list_r.delete(0)?;
     }
 
