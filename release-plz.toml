@@ -1,0 +1,11 @@
+[workspace]
+changelog_config = "cliff.toml"
+publish_timeout = "10m"
+
+[[package]]
+name = "lorosurgeon-derive"
+publish = true
+
+[[package]]
+name = "lorosurgeon"
+publish = true
