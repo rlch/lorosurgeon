@@ -1,9 +1,6 @@
 name: Release
 
 on:
-  merge_group:
-  pull_request:
-    branches: [main]
   push:
     branches: [main]
 
@@ -11,14 +8,9 @@ permissions:
   contents: write
   pull-requests: write
 
-env:
-  CARGO_TERM_COLOR: always
-  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_API_KEY }}
-
 jobs:
   release-plz:
     name: Release
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,29 +18,8 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Run release-plz
+      - name: Release
         uses: release-plz/action@v0.5
-        with:
-          command: release-pr
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_API_KEY }}
-
-  publish:
-    name: Publish
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: release-plz
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Run release-plz release
-        uses: release-plz/action@v0.5
-        with:
-          command: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_API_KEY }}
