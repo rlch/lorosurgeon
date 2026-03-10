@@ -19,14 +19,8 @@ impl MapReconciler {
     }
 
     /// Retain only keys matching the predicate, deleting the rest.
-    pub fn retain(
-        &mut self,
-        mut pred: impl FnMut(&str) -> bool,
-    ) -> Result<(), ReconcileError> {
-        let keys_to_delete: Vec<String> = self
-            .keys()
-            .filter(|k| !pred(k))
-            .collect();
+    pub fn retain(&mut self, mut pred: impl FnMut(&str) -> bool) -> Result<(), ReconcileError> {
+        let keys_to_delete: Vec<String> = self.keys().filter(|k| !pred(k)).collect();
         for key in keys_to_delete {
             self.map.delete(&key)?;
         }
@@ -81,8 +75,7 @@ impl<V: Reconcile> Reconcile for HashMap<String, V> {
         for (key, value) in self {
             m.entry(key, value)?;
         }
-        let new_keys: std::collections::HashSet<&str> =
-            self.keys().map(|k| k.as_str()).collect();
+        let new_keys: std::collections::HashSet<&str> = self.keys().map(|k| k.as_str()).collect();
         m.retain(|k| new_keys.contains(k))?;
         Ok(())
     }
@@ -90,10 +83,7 @@ impl<V: Reconcile> Reconcile for HashMap<String, V> {
 
 /// Reconcile a HashMap<K, V> where K converts to string keys.
 /// Used by derive macros and custom reconciliation for non-String key maps.
-pub fn reconcile_keyed_map<K, V, R>(
-    map: &HashMap<K, V>,
-    r: R,
-) -> Result<(), ReconcileError>
+pub fn reconcile_keyed_map<K, V, R>(map: &HashMap<K, V>, r: R) -> Result<(), ReconcileError>
 where
     K: std::fmt::Display + Eq + std::hash::Hash,
     V: Reconcile,
@@ -104,8 +94,7 @@ where
         let key_str = key.to_string();
         m.entry(&key_str, value)?;
     }
-    let new_keys: std::collections::HashSet<String> =
-        map.keys().map(|k| k.to_string()).collect();
+    let new_keys: std::collections::HashSet<String> = map.keys().map(|k| k.to_string()).collect();
     m.retain(|k| new_keys.contains(k))?;
     Ok(())
 }
@@ -118,8 +107,7 @@ impl<V: Reconcile> Reconcile for BTreeMap<String, V> {
         for (key, value) in self {
             m.entry(key, value)?;
         }
-        let new_keys: std::collections::HashSet<&str> =
-            self.keys().map(|k| k.as_str()).collect();
+        let new_keys: std::collections::HashSet<&str> = self.keys().map(|k| k.as_str()).collect();
         m.retain(|k| new_keys.contains(k))?;
         Ok(())
     }

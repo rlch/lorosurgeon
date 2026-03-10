@@ -1,4 +1,4 @@
-//! ListReconciler — reconcile Vec<T> into a LoroList using LCS diffing.
+//! ListReconciler — reconcile `Vec<T>` into a LoroList using LCS diffing.
 
 use loro::ValueOrContainer;
 use similar::algorithms::DiffHook;
@@ -79,11 +79,7 @@ where
     // Args swapped: pass new_items as "old", hydrated_old as "new".
     // This satisfies HydratedItem<T>: PartialEq<T> (New::Output: PartialEq<Old::Output>).
     // Hook callbacks are swapped accordingly (delete=insert, insert=delete).
-    similar::algorithms::myers::diff(
-        &mut hook,
-        items, 0..items.len(),
-        &old, 0..old.len(),
-    )?;
+    similar::algorithms::myers::diff(&mut hook, items, 0..items.len(), &old, 0..old.len())?;
 
     Ok(())
 }
@@ -120,13 +116,23 @@ struct LcsHook<'a, T> {
 impl<T: Reconcile> DiffHook for LcsHook<'_, T> {
     type Error = ReconcileError;
 
-    fn equal(&mut self, _old_index: usize, _new_index: usize, len: usize) -> Result<(), Self::Error> {
+    fn equal(
+        &mut self,
+        _old_index: usize,
+        _new_index: usize,
+        len: usize,
+    ) -> Result<(), Self::Error> {
         // Items unchanged — skip. No set() on LoroList, so just advance.
         self.idx += len;
         Ok(())
     }
 
-    fn delete(&mut self, old_index: usize, old_len: usize, _new_index: usize) -> Result<(), Self::Error> {
+    fn delete(
+        &mut self,
+        old_index: usize,
+        old_len: usize,
+        _new_index: usize,
+    ) -> Result<(), Self::Error> {
         // "old" in swapped args = new_items. Items in new but not old = INSERT.
         for i in 0..old_len {
             self.list.insert(self.idx, &self.items[old_index + i])?;
@@ -135,7 +141,12 @@ impl<T: Reconcile> DiffHook for LcsHook<'_, T> {
         Ok(())
     }
 
-    fn insert(&mut self, _old_index: usize, new_index: usize, new_len: usize) -> Result<(), Self::Error> {
+    fn insert(
+        &mut self,
+        _old_index: usize,
+        new_index: usize,
+        new_len: usize,
+    ) -> Result<(), Self::Error> {
         let _ = new_index;
         // "new" in swapped args = hydrated_old. Items in old but not new = DELETE.
         for _ in 0..new_len {
@@ -171,7 +182,7 @@ pub fn reconcile_vec_simple<T: Reconcile, R: Reconciler>(
 
 // ── Vec<T> into LoroMovableList ───────────────────────────────────────────
 
-/// Reconcile a Vec<T> into a LoroMovableList using LCS-based diffing.
+/// Reconcile a `Vec<T>` into a LoroMovableList using LCS-based diffing.
 ///
 /// Items with `#[key]` are matched by key identity — matched items are
 /// updated in place via `set()`, preserving CRDT element identity.

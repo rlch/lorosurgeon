@@ -1,6 +1,7 @@
 //! Derive macros for lorosurgeon.
 
 mod attrs;
+mod type_util;
 
 mod hydrate {
     pub mod enum_impl;

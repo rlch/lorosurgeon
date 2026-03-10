@@ -5,11 +5,9 @@ use quote::quote;
 use syn::{DataStruct, DeriveInput, Fields, Ident};
 
 use crate::attrs::{FieldAttrs, MissingStrategy};
+use crate::type_util::{extract_vec_inner_type, is_option_type, is_u8_type, is_vec_non_u8};
 
-pub fn derive_hydrate_struct(
-    input: &DeriveInput,
-    data: &DataStruct,
-) -> syn::Result<TokenStream> {
+pub fn derive_hydrate_struct(input: &DeriveInput, data: &DataStruct) -> syn::Result<TokenStream> {
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let hydrate_body = match &data.fields {
@@ -25,10 +23,7 @@ pub fn derive_hydrate_struct(
     })
 }
 
-fn derive_named_struct(
-    name: &Ident,
-    fields: &syn::FieldsNamed,
-) -> syn::Result<TokenStream> {
+fn derive_named_struct(name: &Ident, fields: &syn::FieldsNamed) -> syn::Result<TokenStream> {
     let mut field_hydrations = Vec::new();
     let mut flatten_fields = Vec::new();
 
@@ -96,9 +91,7 @@ fn derive_named_struct(
         } else {
             // Check if it's a Vec<T> (non-u8) — use hydrate_vec_from_list
             let vec_inner = extract_vec_inner_type(field_ty);
-            let is_vec_non_u8 = vec_inner
-                .as_ref()
-                .is_some_and(|inner| !is_u8_type(inner));
+            let is_vec_non_u8 = vec_inner.as_ref().is_some_and(|inner| !is_u8_type(inner));
 
             if is_vec_non_u8 {
                 let inner = vec_inner.unwrap();
@@ -174,13 +167,21 @@ fn derive_named_struct(
     })
 }
 
-fn derive_tuple_struct(
-    name: &Ident,
-    fields: &syn::FieldsUnnamed,
-) -> syn::Result<TokenStream> {
+fn derive_tuple_struct(name: &Ident, fields: &syn::FieldsUnnamed) -> syn::Result<TokenStream> {
     if fields.unnamed.len() == 1 {
-        // Newtype — transparent delegation
         let inner_ty = &fields.unnamed[0].ty;
+
+        // Newtype over Vec<T> (non-u8) — hydrate from LoroList
+        if is_vec_non_u8(inner_ty) {
+            let elem_ty = extract_vec_inner_type(inner_ty).unwrap();
+            return Ok(quote! {
+                fn hydrate_list(list: &loro::LoroList) -> Result<Self, lorosurgeon::HydrateError> {
+                    lorosurgeon::hydrate_vec_from_list::<#elem_ty>(list).map(#name)
+                }
+            });
+        }
+
+        // Newtype — transparent delegation
         Ok(quote! {
             fn hydrate(source: &loro::ValueOrContainer) -> Result<Self, lorosurgeon::HydrateError> {
                 <#inner_ty as lorosurgeon::Hydrate>::hydrate(source).map(#name)
@@ -257,40 +258,4 @@ fn derive_unit_struct(name: &Ident) -> syn::Result<TokenStream> {
             Ok(#name)
         }
     })
-}
-
-/// Check if a type is `Option<...>`.
-fn is_option_type(ty: &syn::Type) -> bool {
-    if let syn::Type::Path(type_path) = ty {
-        if let Some(segment) = type_path.path.segments.last() {
-            return segment.ident == "Option";
-        }
-    }
-    false
-}
-
-/// Extract the inner type from `Vec<T>`, returning `Some(T)` or `None`.
-fn extract_vec_inner_type(ty: &syn::Type) -> Option<&syn::Type> {
-    if let syn::Type::Path(type_path) = ty {
-        if let Some(segment) = type_path.path.segments.last() {
-            if segment.ident == "Vec" {
-                if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                    if let Some(syn::GenericArgument::Type(inner)) = args.args.first() {
-                        return Some(inner);
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Check if a type is `u8`.
-fn is_u8_type(ty: &syn::Type) -> bool {
-    if let syn::Type::Path(type_path) = ty {
-        if let Some(segment) = type_path.path.segments.last() {
-            return segment.ident == "u8" && segment.arguments.is_none();
-        }
-    }
-    false
 }

@@ -1,10 +1,18 @@
 //! Integration tests for lorosurgeon derive macros and core traits.
+#![allow(
+    clippy::bool_assert_comparison,   // assert_eq!(x, true) is clearer in tests
+    clippy::useless_conversion,       // .into() on same type in loro import_batch
+    clippy::box_collection,           // Box<String> intentionally tested
+    clippy::owned_cow,                // Cow<'_, String> intentionally tested
+)]
 
 use std::borrow::Cow;
 use std::collections::HashMap;
 
 use loro::LoroDoc;
-use lorosurgeon::{ByteArray, DocSync, Hydrate, HydrateResultExt, MapReconciler, Reconcile, RootReconciler};
+use lorosurgeon::{
+    ByteArray, DocSync, Hydrate, HydrateResultExt, MapReconciler, Reconcile, RootReconciler,
+};
 
 // ── Phase 1: Scalar round-trips ─────────────────────────────────────────
 
@@ -37,11 +45,11 @@ fn test_scalar_roundtrip_f64() {
     let doc = LoroDoc::new();
     let map = doc.get_map("test");
 
-    map.insert("v", 3.14f64).unwrap();
+    map.insert("v", 2.72f64).unwrap();
     doc.commit();
 
     let result: f64 = lorosurgeon::hydrate_prop(&map, "v").unwrap();
-    assert!((result - 3.14).abs() < f64::EPSILON);
+    assert!((result - 2.72).abs() < f64::EPSILON);
 }
 
 #[test]
@@ -120,10 +128,7 @@ fn test_reconcile_scalars_into_map() {
         lorosurgeon::hydrate_prop::<String>(&map, "name").unwrap(),
         "Alice"
     );
-    assert_eq!(
-        lorosurgeon::hydrate_prop::<i64>(&map, "age").unwrap(),
-        30
-    );
+    assert_eq!(lorosurgeon::hydrate_prop::<i64>(&map, "age").unwrap(), 30);
     assert_eq!(
         lorosurgeon::hydrate_prop::<bool>(&map, "active").unwrap(),
         true
@@ -674,7 +679,9 @@ fn test_movable_list_positional_basic() {
     let doc = LoroDoc::new();
     let map = doc.get_map("root");
 
-    let v1 = PositionalMovable { items: vec![10, 20, 30] };
+    let v1 = PositionalMovable {
+        items: vec![10, 20, 30],
+    };
     let reconciler = RootReconciler::new(map.clone());
     v1.reconcile(reconciler).unwrap();
     doc.commit();
@@ -683,7 +690,9 @@ fn test_movable_list_positional_basic() {
     assert_eq!(hydrated, v1);
 
     // Update: set overlap, delete extras, append new
-    let v2 = PositionalMovable { items: vec![10, 25, 30, 40] };
+    let v2 = PositionalMovable {
+        items: vec![10, 25, 30, 40],
+    };
     let reconciler = RootReconciler::new(map.clone());
     v2.reconcile(reconciler).unwrap();
     doc.commit();
@@ -697,7 +706,9 @@ fn test_movable_list_positional_shrink() {
     let doc = LoroDoc::new();
     let map = doc.get_map("root");
 
-    let v1 = PositionalMovable { items: vec![1, 2, 3, 4, 5] };
+    let v1 = PositionalMovable {
+        items: vec![1, 2, 3, 4, 5],
+    };
     let reconciler = RootReconciler::new(map.clone());
     v1.reconcile(reconciler).unwrap();
     doc.commit();
@@ -725,9 +736,18 @@ fn test_movable_list_keyed_insert_delete() {
 
     let v1 = MovableContainer {
         items: vec![
-            KeyedItem { id: "a".into(), value: 1 },
-            KeyedItem { id: "b".into(), value: 2 },
-            KeyedItem { id: "c".into(), value: 3 },
+            KeyedItem {
+                id: "a".into(),
+                value: 1,
+            },
+            KeyedItem {
+                id: "b".into(),
+                value: 2,
+            },
+            KeyedItem {
+                id: "c".into(),
+                value: 3,
+            },
         ],
     };
 
@@ -741,9 +761,18 @@ fn test_movable_list_keyed_insert_delete() {
     // Remove "b", add "d"
     let v2 = MovableContainer {
         items: vec![
-            KeyedItem { id: "a".into(), value: 1 },
-            KeyedItem { id: "c".into(), value: 3 },
-            KeyedItem { id: "d".into(), value: 4 },
+            KeyedItem {
+                id: "a".into(),
+                value: 1,
+            },
+            KeyedItem {
+                id: "c".into(),
+                value: 3,
+            },
+            KeyedItem {
+                id: "d".into(),
+                value: 4,
+            },
         ],
     };
 
@@ -762,9 +791,18 @@ fn test_movable_list_keyed_reorder() {
 
     let v1 = MovableContainer {
         items: vec![
-            KeyedItem { id: "a".into(), value: 1 },
-            KeyedItem { id: "b".into(), value: 2 },
-            KeyedItem { id: "c".into(), value: 3 },
+            KeyedItem {
+                id: "a".into(),
+                value: 1,
+            },
+            KeyedItem {
+                id: "b".into(),
+                value: 2,
+            },
+            KeyedItem {
+                id: "c".into(),
+                value: 3,
+            },
         ],
     };
 
@@ -775,9 +813,18 @@ fn test_movable_list_keyed_reorder() {
     // Reverse order
     let v2 = MovableContainer {
         items: vec![
-            KeyedItem { id: "c".into(), value: 3 },
-            KeyedItem { id: "b".into(), value: 2 },
-            KeyedItem { id: "a".into(), value: 1 },
+            KeyedItem {
+                id: "c".into(),
+                value: 3,
+            },
+            KeyedItem {
+                id: "b".into(),
+                value: 2,
+            },
+            KeyedItem {
+                id: "a".into(),
+                value: 1,
+            },
         ],
     };
 
@@ -796,8 +843,14 @@ fn test_movable_list_keyed_update_in_place() {
 
     let v1 = MovableContainer {
         items: vec![
-            KeyedItem { id: "a".into(), value: 1 },
-            KeyedItem { id: "b".into(), value: 2 },
+            KeyedItem {
+                id: "a".into(),
+                value: 1,
+            },
+            KeyedItem {
+                id: "b".into(),
+                value: 2,
+            },
         ],
     };
 
@@ -808,8 +861,14 @@ fn test_movable_list_keyed_update_in_place() {
     // Update values but keep same keys — should use set() (identity-preserving)
     let v2 = MovableContainer {
         items: vec![
-            KeyedItem { id: "a".into(), value: 10 },
-            KeyedItem { id: "b".into(), value: 20 },
+            KeyedItem {
+                id: "a".into(),
+                value: 10,
+            },
+            KeyedItem {
+                id: "b".into(),
+                value: 20,
+            },
         ],
     };
 
@@ -829,9 +888,18 @@ fn test_movable_list_keyed_concurrent_reorder_merge() {
 
     let initial = MovableContainer {
         items: vec![
-            KeyedItem { id: "a".into(), value: 1 },
-            KeyedItem { id: "b".into(), value: 2 },
-            KeyedItem { id: "c".into(), value: 3 },
+            KeyedItem {
+                id: "a".into(),
+                value: 1,
+            },
+            KeyedItem {
+                id: "b".into(),
+                value: 2,
+            },
+            KeyedItem {
+                id: "c".into(),
+                value: 3,
+            },
         ],
     };
 
@@ -848,9 +916,18 @@ fn test_movable_list_keyed_concurrent_reorder_merge() {
     // Peer 1: update "a" value
     let v1 = MovableContainer {
         items: vec![
-            KeyedItem { id: "a".into(), value: 100 },
-            KeyedItem { id: "b".into(), value: 2 },
-            KeyedItem { id: "c".into(), value: 3 },
+            KeyedItem {
+                id: "a".into(),
+                value: 100,
+            },
+            KeyedItem {
+                id: "b".into(),
+                value: 2,
+            },
+            KeyedItem {
+                id: "c".into(),
+                value: 3,
+            },
         ],
     };
     let reconciler = RootReconciler::new(map1.clone());
@@ -860,9 +937,18 @@ fn test_movable_list_keyed_concurrent_reorder_merge() {
     // Peer 2: update "c" value
     let v2 = MovableContainer {
         items: vec![
-            KeyedItem { id: "a".into(), value: 1 },
-            KeyedItem { id: "b".into(), value: 2 },
-            KeyedItem { id: "c".into(), value: 300 },
+            KeyedItem {
+                id: "a".into(),
+                value: 1,
+            },
+            KeyedItem {
+                id: "b".into(),
+                value: 2,
+            },
+            KeyedItem {
+                id: "c".into(),
+                value: 300,
+            },
         ],
     };
     let reconciler = RootReconciler::new(map2.clone());
@@ -873,7 +959,9 @@ fn test_movable_list_keyed_concurrent_reorder_merge() {
     let update1 = doc1.export(loro::ExportMode::all_updates()).unwrap();
     let update2 = doc2.export(loro::ExportMode::all_updates()).unwrap();
     let merged = LoroDoc::new();
-    merged.import_batch(&[update1.into(), update2.into()]).unwrap();
+    merged
+        .import_batch(&[update1.into(), update2.into()])
+        .unwrap();
 
     let result = MovableContainer::hydrate_map(&merged.get_map("root")).unwrap();
     assert_eq!(result.items.len(), 3);
@@ -900,9 +988,10 @@ fn test_movable_list_empty_to_nonempty() {
 
     // Add items
     let v2 = MovableContainer {
-        items: vec![
-            KeyedItem { id: "x".into(), value: 42 },
-        ],
+        items: vec![KeyedItem {
+            id: "x".into(),
+            value: 42,
+        }],
     };
     let reconciler = RootReconciler::new(map.clone());
     v2.reconcile(reconciler).unwrap();
@@ -919,8 +1008,14 @@ fn test_movable_list_nonempty_to_empty() {
 
     let v1 = MovableContainer {
         items: vec![
-            KeyedItem { id: "a".into(), value: 1 },
-            KeyedItem { id: "b".into(), value: 2 },
+            KeyedItem {
+                id: "a".into(),
+                value: 1,
+            },
+            KeyedItem {
+                id: "b".into(),
+                value: 2,
+            },
         ],
     };
     let reconciler = RootReconciler::new(map.clone());
@@ -1118,7 +1213,9 @@ fn test_list_lcs_basic_roundtrip() {
     let doc = LoroDoc::new();
     let map = doc.get_map("root");
 
-    let v1 = ListContainer { items: vec![1, 2, 3] };
+    let v1 = ListContainer {
+        items: vec![1, 2, 3],
+    };
     let reconciler = RootReconciler::new(map.clone());
     v1.reconcile(reconciler).unwrap();
     doc.commit();
@@ -1132,13 +1229,17 @@ fn test_list_lcs_append() {
     let doc = LoroDoc::new();
     let map = doc.get_map("root");
 
-    let v1 = ListContainer { items: vec![1, 2, 3] };
+    let v1 = ListContainer {
+        items: vec![1, 2, 3],
+    };
     let reconciler = RootReconciler::new(map.clone());
     v1.reconcile(reconciler).unwrap();
     doc.commit();
 
     // Append — LCS should skip [1,2,3] and only insert [4,5]
-    let v2 = ListContainer { items: vec![1, 2, 3, 4, 5] };
+    let v2 = ListContainer {
+        items: vec![1, 2, 3, 4, 5],
+    };
     let reconciler = RootReconciler::new(map.clone());
     v2.reconcile(reconciler).unwrap();
     doc.commit();
@@ -1152,13 +1253,17 @@ fn test_list_lcs_prepend() {
     let doc = LoroDoc::new();
     let map = doc.get_map("root");
 
-    let v1 = ListContainer { items: vec![3, 4, 5] };
+    let v1 = ListContainer {
+        items: vec![3, 4, 5],
+    };
     let reconciler = RootReconciler::new(map.clone());
     v1.reconcile(reconciler).unwrap();
     doc.commit();
 
     // Prepend — LCS should insert [1,2] and skip [3,4,5]
-    let v2 = ListContainer { items: vec![1, 2, 3, 4, 5] };
+    let v2 = ListContainer {
+        items: vec![1, 2, 3, 4, 5],
+    };
     let reconciler = RootReconciler::new(map.clone());
     v2.reconcile(reconciler).unwrap();
     doc.commit();
@@ -1172,13 +1277,17 @@ fn test_list_lcs_middle_insert() {
     let doc = LoroDoc::new();
     let map = doc.get_map("root");
 
-    let v1 = ListContainer { items: vec![1, 2, 5, 6] };
+    let v1 = ListContainer {
+        items: vec![1, 2, 5, 6],
+    };
     let reconciler = RootReconciler::new(map.clone());
     v1.reconcile(reconciler).unwrap();
     doc.commit();
 
     // Insert in middle — LCS should skip [1,2], insert [3,4], skip [5,6]
-    let v2 = ListContainer { items: vec![1, 2, 3, 4, 5, 6] };
+    let v2 = ListContainer {
+        items: vec![1, 2, 3, 4, 5, 6],
+    };
     let reconciler = RootReconciler::new(map.clone());
     v2.reconcile(reconciler).unwrap();
     doc.commit();
@@ -1192,13 +1301,17 @@ fn test_list_lcs_delete() {
     let doc = LoroDoc::new();
     let map = doc.get_map("root");
 
-    let v1 = ListContainer { items: vec![1, 2, 3, 4, 5] };
+    let v1 = ListContainer {
+        items: vec![1, 2, 3, 4, 5],
+    };
     let reconciler = RootReconciler::new(map.clone());
     v1.reconcile(reconciler).unwrap();
     doc.commit();
 
     // Remove middle — LCS should skip [1,2], delete [3], skip [4,5]
-    let v2 = ListContainer { items: vec![1, 2, 4, 5] };
+    let v2 = ListContainer {
+        items: vec![1, 2, 4, 5],
+    };
     let reconciler = RootReconciler::new(map.clone());
     v2.reconcile(reconciler).unwrap();
     doc.commit();
@@ -1212,7 +1325,9 @@ fn test_list_lcs_no_change_no_ops() {
     let doc = LoroDoc::new();
     let map = doc.get_map("root");
 
-    let v1 = ListContainer { items: vec![1, 2, 3] };
+    let v1 = ListContainer {
+        items: vec![1, 2, 3],
+    };
     let reconciler = RootReconciler::new(map.clone());
     v1.reconcile(reconciler).unwrap();
     doc.commit();
@@ -1225,7 +1340,10 @@ fn test_list_lcs_no_change_no_ops() {
     doc.commit();
 
     let version_after = doc.oplog_vv();
-    assert_eq!(version_before, version_after, "Identical list should produce zero ops");
+    assert_eq!(
+        version_before, version_after,
+        "Identical list should produce zero ops"
+    );
 }
 
 #[test]
@@ -1238,7 +1356,9 @@ fn test_list_lcs_empty_to_nonempty() {
     v1.reconcile(reconciler).unwrap();
     doc.commit();
 
-    let v2 = ListContainer { items: vec![1, 2, 3] };
+    let v2 = ListContainer {
+        items: vec![1, 2, 3],
+    };
     let reconciler = RootReconciler::new(map.clone());
     v2.reconcile(reconciler).unwrap();
     doc.commit();
@@ -1252,7 +1372,9 @@ fn test_list_lcs_nonempty_to_empty() {
     let doc = LoroDoc::new();
     let map = doc.get_map("root");
 
-    let v1 = ListContainer { items: vec![1, 2, 3] };
+    let v1 = ListContainer {
+        items: vec![1, 2, 3],
+    };
     let reconciler = RootReconciler::new(map.clone());
     v1.reconcile(reconciler).unwrap();
     doc.commit();
@@ -1481,8 +1603,15 @@ fn test_enum_key_basic_roundtrip() {
 
     let v1 = KeyedShapeContainer {
         shapes: vec![
-            KeyedShape::Circle { id: "c1".into(), radius: 5.0 },
-            KeyedShape::Rectangle { id: "r1".into(), width: 10.0, height: 20.0 },
+            KeyedShape::Circle {
+                id: "c1".into(),
+                radius: 5.0,
+            },
+            KeyedShape::Rectangle {
+                id: "r1".into(),
+                width: 10.0,
+                height: 20.0,
+            },
             KeyedShape::Point,
         ],
     };
@@ -1502,8 +1631,15 @@ fn test_enum_key_reorder_preserves_identity() {
 
     let v1 = KeyedShapeContainer {
         shapes: vec![
-            KeyedShape::Circle { id: "c1".into(), radius: 5.0 },
-            KeyedShape::Rectangle { id: "r1".into(), width: 10.0, height: 20.0 },
+            KeyedShape::Circle {
+                id: "c1".into(),
+                radius: 5.0,
+            },
+            KeyedShape::Rectangle {
+                id: "r1".into(),
+                width: 10.0,
+                height: 20.0,
+            },
         ],
     };
 
@@ -1514,8 +1650,15 @@ fn test_enum_key_reorder_preserves_identity() {
     // Reverse order and update values
     let v2 = KeyedShapeContainer {
         shapes: vec![
-            KeyedShape::Rectangle { id: "r1".into(), width: 30.0, height: 40.0 },
-            KeyedShape::Circle { id: "c1".into(), radius: 15.0 },
+            KeyedShape::Rectangle {
+                id: "r1".into(),
+                width: 30.0,
+                height: 40.0,
+            },
+            KeyedShape::Circle {
+                id: "c1".into(),
+                radius: 15.0,
+            },
         ],
     };
 
@@ -1534,8 +1677,14 @@ fn test_enum_key_insert_delete() {
 
     let v1 = KeyedShapeContainer {
         shapes: vec![
-            KeyedShape::Circle { id: "c1".into(), radius: 5.0 },
-            KeyedShape::Circle { id: "c2".into(), radius: 10.0 },
+            KeyedShape::Circle {
+                id: "c1".into(),
+                radius: 5.0,
+            },
+            KeyedShape::Circle {
+                id: "c2".into(),
+                radius: 10.0,
+            },
         ],
     };
 
@@ -1546,8 +1695,15 @@ fn test_enum_key_insert_delete() {
     // Remove c1, add r1
     let v2 = KeyedShapeContainer {
         shapes: vec![
-            KeyedShape::Circle { id: "c2".into(), radius: 10.0 },
-            KeyedShape::Rectangle { id: "r1".into(), width: 5.0, height: 5.0 },
+            KeyedShape::Circle {
+                id: "c2".into(),
+                radius: 10.0,
+            },
+            KeyedShape::Rectangle {
+                id: "r1".into(),
+                width: 5.0,
+                height: 5.0,
+            },
         ],
     };
 
@@ -1580,7 +1736,9 @@ impl std::fmt::Display for MyId {
 fn test_flexible_hashmap_keys() {
     let doc = LoroDoc::new();
     let map = doc.get_map("test");
-    let inner = map.get_or_create_container("data", loro::LoroMap::new()).unwrap();
+    let inner = map
+        .get_or_create_container("data", loro::LoroMap::new())
+        .unwrap();
 
     inner.insert("key1", "value1").unwrap();
     inner.insert("key2", "value2").unwrap();
@@ -1605,4 +1763,577 @@ fn test_flexible_hashmap_keys() {
     let result2: HashMap<MyId, String> = lorosurgeon::hydrate_keyed_map(&inner2).unwrap();
     assert_eq!(result2.len(), 1);
     assert_eq!(result2[&MyId("key1".into())], "updated");
+}
+
+// ── Custom function attributes ──────────────────────────────────────────
+
+#[allow(clippy::ptr_arg)] // Signatures must match derive macro codegen: &self.field → &String
+mod custom_fns {
+    use loro::{LoroMap, ValueOrContainer};
+    use lorosurgeon::{HydrateError, MapReconciler};
+
+    /// Custom hydrate function: reads a string and uppercases it.
+    pub fn hydrate_upper(map: &LoroMap, key: &str) -> Result<String, HydrateError> {
+        match map.get(key) {
+            Some(ValueOrContainer::Value(loro::LoroValue::String(s))) => Ok(s.to_uppercase()),
+            Some(_) => Err(HydrateError::unexpected("string", "other")),
+            None => Err(HydrateError::missing(key)),
+        }
+    }
+
+    /// Custom reconcile function: lowercases before writing.
+    pub fn reconcile_lower(
+        value: &String,
+        m: &mut MapReconciler,
+        key: &str,
+    ) -> Result<(), lorosurgeon::ReconcileError> {
+        m.entry(key, &value.to_lowercase())
+    }
+}
+
+#[allow(clippy::ptr_arg)]
+mod custom_module {
+    use loro::LoroMap;
+    use lorosurgeon::{HydrateError, MapReconciler};
+
+    /// Module-style: hydrate reverses the string.
+    pub fn hydrate(map: &LoroMap, key: &str) -> Result<String, HydrateError> {
+        match map.get(key) {
+            Some(loro::ValueOrContainer::Value(loro::LoroValue::String(s))) => {
+                Ok(s.chars().rev().collect())
+            }
+            Some(_) => Err(HydrateError::unexpected("string", "other")),
+            None => Err(HydrateError::missing(key)),
+        }
+    }
+
+    /// Module-style: reconcile reverses the string before writing.
+    pub fn reconcile(
+        value: &String,
+        m: &mut MapReconciler,
+        key: &str,
+    ) -> Result<(), lorosurgeon::ReconcileError> {
+        let reversed: String = value.chars().rev().collect();
+        m.entry(key, &reversed)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct CustomHydrateOnly {
+    #[loro(hydrate = "custom_fns::hydrate_upper")]
+    name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct CustomReconcileOnly {
+    #[loro(reconcile = "custom_fns::reconcile_lower")]
+    name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct CustomBoth {
+    #[loro(
+        hydrate = "custom_fns::hydrate_upper",
+        reconcile = "custom_fns::reconcile_lower"
+    )]
+    name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct CustomWithModule {
+    #[loro(with = "custom_module")]
+    label: String,
+}
+
+#[test]
+fn test_custom_hydrate_fn() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+    map.insert("name", "hello").unwrap();
+    doc.commit();
+
+    let result = CustomHydrateOnly::hydrate_map(&map).unwrap();
+    assert_eq!(result.name, "HELLO");
+}
+
+#[test]
+fn test_custom_reconcile_fn() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = CustomReconcileOnly {
+        name: "HELLO".to_string(),
+    };
+    let reconciler = RootReconciler::new(map.clone());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Raw value should be lowercased
+    let raw: String = lorosurgeon::hydrate_prop(&map, "name").unwrap();
+    assert_eq!(raw, "hello");
+}
+
+#[test]
+fn test_custom_hydrate_and_reconcile() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = CustomBoth {
+        name: "Hello".to_string(),
+    };
+    let reconciler = RootReconciler::new(map.clone());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Reconcile lowercases: stored as "hello"
+    let raw: String = lorosurgeon::hydrate_prop(&map, "name").unwrap();
+    assert_eq!(raw, "hello");
+
+    // Hydrate uppercases: reads as "HELLO"
+    let hydrated = CustomBoth::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated.name, "HELLO");
+}
+
+#[test]
+fn test_custom_with_module() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = CustomWithModule {
+        label: "abc".to_string(),
+    };
+    let reconciler = RootReconciler::new(map.clone());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Module reconcile reverses: stored as "cba"
+    let raw: String = lorosurgeon::hydrate_prop(&map, "label").unwrap();
+    assert_eq!(raw, "cba");
+
+    // Module hydrate reverses back: reads as "abc"
+    let hydrated = CustomWithModule::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated.label, "abc");
+}
+
+// ── Flatten edge cases ──────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct Dimensions {
+    width: f64,
+    height: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct Origin {
+    x: f64,
+    y: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct MultiFlattened {
+    name: String,
+    #[loro(flatten)]
+    origin: Origin,
+    #[loro(flatten)]
+    size: Dimensions,
+}
+
+#[test]
+fn test_flatten_multiple() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = MultiFlattened {
+        name: "rect".to_string(),
+        origin: Origin { x: 5.0, y: 10.0 },
+        size: Dimensions {
+            width: 100.0,
+            height: 50.0,
+        },
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // All fields should be directly on the map
+    let x: f64 = lorosurgeon::hydrate_prop(&map, "x").unwrap();
+    let y: f64 = lorosurgeon::hydrate_prop(&map, "y").unwrap();
+    let w: f64 = lorosurgeon::hydrate_prop(&map, "width").unwrap();
+    let h: f64 = lorosurgeon::hydrate_prop(&map, "height").unwrap();
+    assert_eq!(x, 5.0);
+    assert_eq!(y, 10.0);
+    assert_eq!(w, 100.0);
+    assert_eq!(h, 50.0);
+
+    let hydrated = MultiFlattened::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, val);
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct FlattenWithMissing {
+    name: String,
+    #[loro(flatten)]
+    pos: PositionWithDefaults,
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct PositionWithDefaults {
+    #[loro(missing)]
+    x: f64,
+    #[loro(missing)]
+    y: f64,
+    #[loro(missing)]
+    rotation: f64,
+}
+
+#[test]
+fn test_flatten_with_missing_defaults() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    // Only set name — flattened fields should use defaults
+    map.insert("name", "test").unwrap();
+    doc.commit();
+
+    let hydrated = FlattenWithMissing::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated.name, "test");
+    assert_eq!(hydrated.pos.x, 0.0);
+    assert_eq!(hydrated.pos.y, 0.0);
+    assert_eq!(hydrated.pos.rotation, 0.0);
+}
+
+#[test]
+fn test_flatten_roundtrip_update() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = MultiFlattened {
+        name: "rect".to_string(),
+        origin: Origin { x: 0.0, y: 0.0 },
+        size: Dimensions {
+            width: 50.0,
+            height: 25.0,
+        },
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Update only some fields
+    let v2 = MultiFlattened {
+        name: "rect".to_string(),
+        origin: Origin { x: 10.0, y: 20.0 },
+        size: Dimensions {
+            width: 50.0,
+            height: 25.0,
+        },
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = MultiFlattened::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v2);
+}
+
+// ── Derive edge cases: generics ─────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct GenericWrapper<
+    T: lorosurgeon::Hydrate + lorosurgeon::Reconcile + std::fmt::Debug + Clone + PartialEq,
+> {
+    inner: T,
+    label: String,
+}
+
+#[test]
+fn test_generic_struct_with_scalar() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = GenericWrapper {
+        inner: 42i64,
+        label: "test".to_string(),
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = GenericWrapper::<i64>::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, val);
+}
+
+#[test]
+fn test_generic_struct_nested() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = GenericWrapper {
+        inner: Position { x: 1.0, y: 2.0 },
+        label: "pos".to_string(),
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = GenericWrapper::<Position>::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, val);
+}
+
+// ── Derive edge cases: enum + json ──────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+enum JsonTheme {
+    Light,
+    Dark,
+    Custom { primary: String, secondary: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct DocWithJsonEnum {
+    name: String,
+    #[loro(json)]
+    theme: JsonTheme,
+}
+
+#[test]
+fn test_enum_json_unit_variant() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = DocWithJsonEnum {
+        name: "my-doc".to_string(),
+        theme: JsonTheme::Light,
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = DocWithJsonEnum::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, val);
+}
+
+#[test]
+fn test_enum_json_data_variant() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = DocWithJsonEnum {
+        name: "my-doc".to_string(),
+        theme: JsonTheme::Custom {
+            primary: "#ff0000".to_string(),
+            secondary: "#00ff00".to_string(),
+        },
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = DocWithJsonEnum::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, val);
+}
+
+// ── Derive edge cases: enum with scalar-only variants ───────────────────
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+enum Content {
+    Text { body: String },
+    Number { value: i64 },
+    Empty,
+}
+
+#[test]
+fn test_enum_data_variant_roundtrip() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = Content::Text {
+        body: "hello".to_string(),
+    };
+    let reconciler = lorosurgeon::PropReconciler::map_put(map.clone(), "v".to_string());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated: Content = lorosurgeon::Hydrate::hydrate(&map.get("v").unwrap()).unwrap();
+    assert_eq!(hydrated, val);
+}
+
+#[test]
+fn test_enum_unit_variant_roundtrip() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = Content::Empty;
+    let reconciler = lorosurgeon::PropReconciler::map_put(map.clone(), "v".to_string());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated: Content = lorosurgeon::Hydrate::hydrate(&map.get("v").unwrap()).unwrap();
+    assert_eq!(hydrated, val);
+}
+
+#[test]
+fn test_enum_switch_variant() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    // Write Text variant
+    let val1 = Content::Text {
+        body: "hello".to_string(),
+    };
+    let reconciler = lorosurgeon::PropReconciler::map_put(map.clone(), "v".to_string());
+    val1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Overwrite with Number variant
+    let val2 = Content::Number { value: 42 };
+    let reconciler = lorosurgeon::PropReconciler::map_put(map.clone(), "v".to_string());
+    val2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated: Content = lorosurgeon::Hydrate::hydrate(&map.get("v").unwrap()).unwrap();
+    assert_eq!(hydrated, val2);
+}
+
+// ── Derive edge cases: Box and Cow fields ───────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct BoxedFields {
+    #[loro(missing)]
+    name: Box<String>,
+    value: i64,
+}
+
+#[test]
+fn test_boxed_field_roundtrip() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = BoxedFields {
+        name: Box::new("boxed".to_string()),
+        value: 99,
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = BoxedFields::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, val);
+}
+
+// ── Vec<T> in enum variants ─────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+enum ListContent {
+    Text { body: String },
+    Items { items: Vec<String> },
+    Empty,
+}
+
+#[test]
+fn test_enum_with_vec_field() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = ListContent::Items {
+        items: vec!["a".to_string(), "b".to_string(), "c".to_string()],
+    };
+    let reconciler = lorosurgeon::PropReconciler::map_put(map.clone(), "v".to_string());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated: ListContent = lorosurgeon::Hydrate::hydrate(&map.get("v").unwrap()).unwrap();
+    assert_eq!(hydrated, val);
+}
+
+#[test]
+fn test_enum_with_vec_field_switch() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    // Write Items variant
+    let val1 = ListContent::Items {
+        items: vec!["x".to_string()],
+    };
+    let reconciler = lorosurgeon::PropReconciler::map_put(map.clone(), "v".to_string());
+    val1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Switch to Text variant
+    let val2 = ListContent::Text {
+        body: "hello".to_string(),
+    };
+    let reconciler = lorosurgeon::PropReconciler::map_put(map.clone(), "v".to_string());
+    val2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated: ListContent = lorosurgeon::Hydrate::hydrate(&map.get("v").unwrap()).unwrap();
+    assert_eq!(hydrated, val2);
+}
+
+// ── Newtype over Vec<T> ─────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct IdList(Vec<String>);
+
+#[test]
+fn test_newtype_over_vec() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = IdList(vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+    let reconciler = lorosurgeon::PropReconciler::map_put(map.clone(), "ids".to_string());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated: IdList = lorosurgeon::Hydrate::hydrate(&map.get("ids").unwrap()).unwrap();
+    assert_eq!(hydrated, val);
+}
+
+#[test]
+fn test_newtype_over_vec_empty() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = IdList(vec![]);
+    let reconciler = lorosurgeon::PropReconciler::map_put(map.clone(), "ids".to_string());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated: IdList = lorosurgeon::Hydrate::hydrate(&map.get("ids").unwrap()).unwrap();
+    assert_eq!(hydrated, val);
+}
+
+// ── Newtype over Vec<T> as struct field ─────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct DocWithIdList {
+    name: String,
+    tags: IdList,
+}
+
+#[test]
+fn test_newtype_vec_as_field() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let val = DocWithIdList {
+        name: "test".to_string(),
+        tags: IdList(vec!["rust".to_string(), "loro".to_string()]),
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    val.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = DocWithIdList::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, val);
 }

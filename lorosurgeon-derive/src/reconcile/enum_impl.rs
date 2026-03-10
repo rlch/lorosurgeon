@@ -5,25 +5,25 @@ use quote::{format_ident, quote};
 use syn::{DataEnum, DeriveInput, Fields, Ident};
 
 use crate::attrs::FieldAttrs;
+use crate::type_util::is_vec_non_u8;
 
-pub fn derive_reconcile_enum(
-    input: &DeriveInput,
-    data: &DataEnum,
-) -> syn::Result<TokenStream> {
+pub fn derive_reconcile_enum(input: &DeriveInput, data: &DataEnum) -> syn::Result<TokenStream> {
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    let has_data_variants = data.variants.iter().any(|v| !matches!(v.fields, Fields::Unit));
+    let has_data_variants = data
+        .variants
+        .iter()
+        .any(|v| !matches!(v.fields, Fields::Unit));
     let all_unit = !has_data_variants;
 
     // Check if any variant has a #[key] field
-    let has_keys = data.variants.iter().any(|v| {
-        match &v.fields {
-            Fields::Named(fields) => fields.named.iter().any(|f| {
-                FieldAttrs::from_attrs(&f.attrs).is_ok_and(|a| a.is_key)
-            }),
-            _ => false,
-        }
+    let has_keys = data.variants.iter().any(|v| match &v.fields {
+        Fields::Named(fields) => fields
+            .named
+            .iter()
+            .any(|f| FieldAttrs::from_attrs(&f.attrs).is_ok_and(|a| a.is_key)),
+        _ => false,
     });
 
     let match_arms: Vec<_> = data
@@ -113,8 +113,17 @@ pub fn derive_reconcile_enum(
                             let field_name = f.ident.as_ref().unwrap();
                             let attrs = FieldAttrs::from_attrs(&f.attrs).unwrap_or_default();
                             let loro_key = attrs.loro_key(&field_name.to_string());
-                            quote! {
-                                inner_map.entry(#loro_key, #field_name)?;
+                            if is_vec_non_u8(&f.ty) {
+                                quote! {
+                                    {
+                                        let reconciler = lorosurgeon::PropReconciler::map_put(inner_map.map.clone(), #loro_key.to_string());
+                                        lorosurgeon::reconcile_vec(#field_name, reconciler)?;
+                                    }
+                                }
+                            } else {
+                                quote! {
+                                    inner_map.entry(#loro_key, #field_name)?;
+                                }
                             }
                         })
                         .collect();
@@ -190,9 +199,10 @@ fn generate_enum_key(
         match &variant.fields {
             Fields::Named(fields) => {
                 // Find #[key] field in this variant
-                let key_field = fields.named.iter().find(|f| {
-                    FieldAttrs::from_attrs(&f.attrs).is_ok_and(|a| a.is_key)
-                });
+                let key_field = fields
+                    .named
+                    .iter()
+                    .find(|f| FieldAttrs::from_attrs(&f.attrs).is_ok_and(|a| a.is_key));
 
                 if let Some(kf) = key_field {
                     let key_field_name = kf.ident.as_ref().unwrap();
@@ -204,7 +214,9 @@ fn generate_enum_key(
                     key_variants.push(quote! { #variant_name(#key_field_ty) });
 
                     // Extract key from enum value
-                    let other_fields: Vec<_> = fields.named.iter()
+                    let other_fields: Vec<_> = fields
+                        .named
+                        .iter()
                         .filter(|f| f.ident.as_ref().unwrap() != key_field_name)
                         .map(|f| {
                             let n = f.ident.as_ref().unwrap();
@@ -232,7 +244,9 @@ fn generate_enum_key(
                     // No key field — unit key variant
                     key_variants.push(quote! { #variant_name });
 
-                    let other_fields: Vec<_> = fields.named.iter()
+                    let other_fields: Vec<_> = fields
+                        .named
+                        .iter()
                         .map(|f| {
                             let n = f.ident.as_ref().unwrap();
                             quote! { #n: _ }
@@ -303,7 +317,9 @@ fn generate_enum_key(
     };
 
     // Generate string match arms for unit variants stored as strings
-    let string_key_arms: Vec<_> = data.variants.iter()
+    let string_key_arms: Vec<_> = data
+        .variants
+        .iter()
         .filter(|v| matches!(v.fields, Fields::Unit))
         .map(|v| {
             let variant_name = &v.ident;

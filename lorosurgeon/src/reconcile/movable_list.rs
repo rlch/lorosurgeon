@@ -1,4 +1,4 @@
-//! MovableListReconciler — reconcile Vec<T> into a LoroMovableList with LCS diffing.
+//! MovableListReconciler — reconcile `Vec<T>` into a LoroMovableList with LCS diffing.
 
 use std::collections::HashMap;
 
@@ -20,11 +20,7 @@ impl MovableListReconciler {
     }
 
     /// Insert a value at the given index.
-    pub fn insert<R: Reconcile>(
-        &mut self,
-        index: usize,
-        value: &R,
-    ) -> Result<(), ReconcileError> {
+    pub fn insert<R: Reconcile>(&mut self, index: usize, value: &R) -> Result<(), ReconcileError> {
         let reconciler = PropReconciler::movable_list_insert(self.list.clone(), index);
         value.reconcile(reconciler)
     }
@@ -65,9 +61,9 @@ pub fn reconcile_movable_list<T: Reconcile>(
     let old_len = list_r.len();
 
     // Check if items have keys
-    let has_keys = items.first().is_some_and(|item| {
-        !matches!(item.key(), LoadKey::NoKey)
-    });
+    let has_keys = items
+        .first()
+        .is_some_and(|item| !matches!(item.key(), LoadKey::NoKey));
 
     if !has_keys {
         return reconcile_positional(items, list_r, old_len);
@@ -172,9 +168,7 @@ fn reconcile_keyed<T: Reconcile>(
 
     // Build a tracking vec: current_order[i] = original old_index of item at position i.
     // After deletions, only surviving items remain in their original relative order.
-    let mut current_order: Vec<usize> = (0..old_len)
-        .filter(|i| old_used[*i])
-        .collect();
+    let mut current_order: Vec<usize> = (0..old_len).filter(|i| old_used[*i]).collect();
 
     // Phase 2: Walk new items in order, building the target arrangement.
     for (target_idx, maybe_old) in new_to_old.iter().enumerate() {

@@ -1,4 +1,4 @@
-//! MaybeMissing<T> — distinguishes "key absent" from "key present".
+//! `MaybeMissing<T>` — distinguishes "key absent" from "key present".
 
 use loro::{LoroList, LoroMap, LoroMovableList, ValueOrContainer};
 
@@ -11,8 +11,7 @@ use crate::reconcile::{NoKey, Reconcile, Reconciler};
 /// Unlike `Option<T>`, which maps both "missing key" and "null value" to `None`,
 /// `MaybeMissing<T>` only returns `Missing` when the key is truly absent.
 /// A null value would attempt to hydrate `T` and may error.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum MaybeMissing<T> {
     #[default]
     Missing,
@@ -52,7 +51,6 @@ impl<T> MaybeMissing<T> {
         }
     }
 }
-
 
 impl<T: Hydrate> Hydrate for MaybeMissing<T> {
     fn hydrate(source: &ValueOrContainer) -> Result<Self, HydrateError> {

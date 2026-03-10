@@ -5,16 +5,20 @@ use quote::quote;
 use syn::{DataEnum, DeriveInput, Fields};
 
 use crate::attrs::FieldAttrs;
+use crate::type_util::{extract_vec_inner_type, is_option_type, is_vec_non_u8};
 
-pub fn derive_hydrate_enum(
-    input: &DeriveInput,
-    data: &DataEnum,
-) -> syn::Result<TokenStream> {
+pub fn derive_hydrate_enum(input: &DeriveInput, data: &DataEnum) -> syn::Result<TokenStream> {
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    let has_unit_variants = data.variants.iter().any(|v| matches!(v.fields, Fields::Unit));
-    let has_data_variants = data.variants.iter().any(|v| !matches!(v.fields, Fields::Unit));
+    let has_unit_variants = data
+        .variants
+        .iter()
+        .any(|v| matches!(v.fields, Fields::Unit));
+    let has_data_variants = data
+        .variants
+        .iter()
+        .any(|v| !matches!(v.fields, Fields::Unit));
 
     // Unit variants hydrate from strings
     let unit_string_arms: Vec<_> = data
@@ -108,7 +112,20 @@ pub fn derive_hydrate_enum(
                             let loro_key = field_attrs.loro_key(&field_name.to_string());
                             let ty = &f.ty;
 
-                            if is_option_type(ty) {
+                            if is_vec_non_u8(ty) {
+                                let inner = extract_vec_inner_type(ty).unwrap();
+                                quote! {
+                                    #field_name: {
+                                        match inner_map.get(#loro_key) {
+                                            Some(loro::ValueOrContainer::Container(loro::Container::List(list))) => {
+                                                lorosurgeon::hydrate_vec_from_list::<#inner>(&list)?
+                                            }
+                                            Some(_) => return Err(lorosurgeon::HydrateError::unexpected("list", "other")),
+                                            None => Vec::new(),
+                                        }
+                                    },
+                                }
+                            } else if is_option_type(ty) {
                                 quote! {
                                     #field_name: lorosurgeon::hydrate_prop_or_default(&inner_map, #loro_key)?,
                                 }
@@ -169,13 +186,4 @@ pub fn derive_hydrate_enum(
             #hydrate_map_fn
         }
     })
-}
-
-fn is_option_type(ty: &syn::Type) -> bool {
-    if let syn::Type::Path(type_path) = ty {
-        if let Some(segment) = type_path.path.segments.last() {
-            return segment.ident == "Option";
-        }
-    }
-    false
 }

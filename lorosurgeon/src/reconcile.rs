@@ -55,9 +55,7 @@ pub trait Reconcile {
 
     /// Extract the identity key from a Loro source (for pre-diffing).
     /// Only hydrates the key, not the full value — used by LCS list reconciliation.
-    fn hydrate_key(
-        _source: &ValueOrContainer,
-    ) -> Result<LoadKey<Self::Key>, ReconcileError> {
+    fn hydrate_key(_source: &ValueOrContainer) -> Result<LoadKey<Self::Key>, ReconcileError> {
         Ok(LoadKey::NoKey)
     }
 }
@@ -152,23 +150,14 @@ impl PropReconciler {
         Ok(())
     }
 
-    fn get_or_create_container<C: ContainerTrait>(
-        self,
-        detached: C,
-    ) -> Result<C, ReconcileError> {
+    fn get_or_create_container<C: ContainerTrait>(self, detached: C) -> Result<C, ReconcileError> {
         let container = match self.action {
-            PropAction::MapPut { map, key } => {
-                map.get_or_create_container(&key, detached)?
-            }
-            PropAction::ListInsert { list, index } => {
-                list.insert_container(index, detached)?
-            }
+            PropAction::MapPut { map, key } => map.get_or_create_container(&key, detached)?,
+            PropAction::ListInsert { list, index } => list.insert_container(index, detached)?,
             PropAction::MovableListInsert { list, index } => {
                 list.insert_container(index, detached)?
             }
-            PropAction::MovableListSet { list, index } => {
-                list.set_container(index, detached)?
-            }
+            PropAction::MovableListSet { list, index } => list.set_container(index, detached)?,
         };
         Ok(container)
     }

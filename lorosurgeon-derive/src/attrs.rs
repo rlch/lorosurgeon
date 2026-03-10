@@ -131,6 +131,8 @@ impl FieldAttrs {
 
     /// Get the Loro key name for this field.
     pub fn loro_key(&self, field_name: &str) -> String {
-        self.rename.clone().unwrap_or_else(|| field_name.to_string())
+        self.rename
+            .clone()
+            .unwrap_or_else(|| field_name.to_string())
     }
 }

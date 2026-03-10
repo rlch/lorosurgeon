@@ -178,7 +178,7 @@ impl Hydrate for Vec<u8> {
 // We can't blanket-impl Vec<T> because of the Vec<u8> specialization.
 // Instead, provide a helper and use it in the derive macro.
 
-/// Hydrate a Vec<T> from a LoroList. Used by derive macros.
+/// Hydrate a `Vec<T>` from a LoroList. Used by derive macros.
 pub fn hydrate_vec_from_list<T: Hydrate>(list: &LoroList) -> Result<Vec<T>, HydrateError> {
     let mut result = Vec::with_capacity(list.len());
     for i in 0..list.len() {
@@ -190,7 +190,7 @@ pub fn hydrate_vec_from_list<T: Hydrate>(list: &LoroList) -> Result<Vec<T>, Hydr
     Ok(result)
 }
 
-/// Hydrate a Vec<T> from a LoroMovableList. Used by derive macros.
+/// Hydrate a `Vec<T>` from a LoroMovableList. Used by derive macros.
 pub fn hydrate_vec_from_movable_list<T: Hydrate>(
     list: &LoroMovableList,
 ) -> Result<Vec<T>, HydrateError> {
@@ -396,9 +396,11 @@ fn loro_value_to_json(v: &LoroValue) -> serde_json::Value {
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
         LoroValue::String(s) => serde_json::Value::String(s.to_string()),
-        LoroValue::Binary(b) => {
-            serde_json::Value::Array(b.iter().map(|byte| serde_json::Value::Number((*byte as i64).into())).collect())
-        }
+        LoroValue::Binary(b) => serde_json::Value::Array(
+            b.iter()
+                .map(|byte| serde_json::Value::Number((*byte as i64).into()))
+                .collect(),
+        ),
         LoroValue::List(list) => {
             serde_json::Value::Array(list.iter().map(loro_value_to_json).collect())
         }

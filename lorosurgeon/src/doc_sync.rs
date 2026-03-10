@@ -57,9 +57,7 @@ pub struct VersionGuard {
 impl VersionGuard {
     /// Capture the document's current version vector.
     pub fn capture(doc: &LoroDoc) -> Self {
-        Self {
-            vv: doc.oplog_vv(),
-        }
+        Self { vv: doc.oplog_vv() }
     }
 
     /// Check if the document's version vector has changed since capture.

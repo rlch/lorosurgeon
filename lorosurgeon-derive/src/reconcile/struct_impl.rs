@@ -5,11 +5,9 @@ use quote::quote;
 use syn::{DataStruct, DeriveInput, Fields, Ident};
 
 use crate::attrs::{ContainerAttrs, FieldAttrs};
+use crate::type_util::is_vec_non_u8;
 
-pub fn derive_reconcile_struct(
-    input: &DeriveInput,
-    data: &DataStruct,
-) -> syn::Result<TokenStream> {
+pub fn derive_reconcile_struct(input: &DeriveInput, data: &DataStruct) -> syn::Result<TokenStream> {
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let container_attrs = ContainerAttrs::from_attrs(&input.attrs)?;
@@ -169,8 +167,24 @@ fn derive_tuple_struct(
     fields: &syn::FieldsUnnamed,
 ) -> syn::Result<(TokenStream, TokenStream, TokenStream, TokenStream)> {
     if fields.unnamed.len() == 1 {
-        // Newtype — transparent delegation
         let inner_ty = &fields.unnamed[0].ty;
+
+        // Newtype over Vec<T> (non-u8) — use list reconciliation
+        if is_vec_non_u8(inner_ty) {
+            let reconcile_body = quote! {
+                fn reconcile<R: lorosurgeon::Reconciler>(&self, r: R) -> Result<(), lorosurgeon::ReconcileError> {
+                    lorosurgeon::reconcile_vec_simple(&self.0, r)
+                }
+            };
+            return Ok((
+                reconcile_body,
+                quote! { lorosurgeon::NoKey },
+                TokenStream::new(),
+                TokenStream::new(),
+            ));
+        }
+
+        // Newtype — transparent delegation
         let reconcile_body = quote! {
             fn reconcile<R: lorosurgeon::Reconciler>(&self, r: R) -> Result<(), lorosurgeon::ReconcileError> {
                 self.0.reconcile(r)
@@ -188,9 +202,7 @@ fn derive_tuple_struct(
         ))
     } else {
         // Tuple struct with 2+ fields — LoroList positionally
-        let field_indices: Vec<_> = (0..fields.unnamed.len())
-            .map(syn::Index::from)
-            .collect();
+        let field_indices: Vec<_> = (0..fields.unnamed.len()).map(syn::Index::from).collect();
 
         let reconcile_body = quote! {
             fn reconcile<R: lorosurgeon::Reconciler>(&self, r: R) -> Result<(), lorosurgeon::ReconcileError> {
@@ -209,30 +221,6 @@ fn derive_tuple_struct(
             TokenStream::new(),
         ))
     }
-}
-
-/// Check if a type is `Vec<T>` where T is not `u8`.
-fn is_vec_non_u8(ty: &syn::Type) -> bool {
-    if let syn::Type::Path(type_path) = ty {
-        if let Some(segment) = type_path.path.segments.last() {
-            if segment.ident == "Vec" {
-                if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                    if let Some(syn::GenericArgument::Type(inner)) = args.args.first() {
-                        // Check if inner is u8
-                        if let syn::Type::Path(inner_path) = inner {
-                            if let Some(seg) = inner_path.path.segments.last() {
-                                if seg.ident == "u8" && seg.arguments.is_none() {
-                                    return false;
-                                }
-                            }
-                        }
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    false
 }
 
 fn derive_unit_struct(

@@ -2,7 +2,9 @@
 
 pub mod impls;
 
-use loro::{Container, LoroDoc, LoroList, LoroMap, LoroMovableList, LoroText, LoroValue, ValueOrContainer};
+use loro::{
+    Container, LoroDoc, LoroList, LoroMap, LoroMovableList, LoroText, LoroValue, ValueOrContainer,
+};
 
 use crate::error::HydrateError;
 
@@ -34,9 +36,7 @@ pub trait Hydrate: Sized {
             LoroValue::List(_) | LoroValue::Map(_) => {
                 Err(HydrateError::unexpected("scalar", "inline collection"))
             }
-            LoroValue::Container(_) => {
-                Err(HydrateError::unexpected("scalar", "container ref"))
-            }
+            LoroValue::Container(_) => Err(HydrateError::unexpected("scalar", "container ref")),
         }
     }
 
