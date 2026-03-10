@@ -71,26 +71,84 @@ fn derive_named_struct(
                     #field_name: lorosurgeon::hydrate_prop_json(map, #loro_key)?,
                 },
             }
-        } else {
-            match &attrs.missing {
-                Some(MissingStrategy::Default) => quote! {
-                    #field_name: lorosurgeon::hydrate_prop_or_default(map, #loro_key)?,
+        } else if attrs.movable {
+            // #[loro(movable)] — hydrate Vec<T> from LoroMovableList
+            let inner_ty = extract_vec_inner_type(field_ty);
+            match inner_ty {
+                Some(inner) => quote! {
+                    #field_name: {
+                        match map.get(#loro_key) {
+                            Some(loro::ValueOrContainer::Container(loro::Container::MovableList(list))) => {
+                                lorosurgeon::hydrate_vec_from_movable_list::<#inner>(&list)?
+                            }
+                            Some(_) => return Err(lorosurgeon::HydrateError::unexpected("movable_list", "other")),
+                            None => Vec::new(),
+                        }
+                    },
                 },
-                Some(MissingStrategy::Function(f)) => {
-                    let func_path: syn::Path = syn::parse_str(f)?;
-                    quote! {
-                        #field_name: lorosurgeon::hydrate_prop_or_else(map, #loro_key, #func_path)?,
+                None => {
+                    return Err(syn::Error::new_spanned(
+                        field,
+                        "#[loro(movable)] can only be used on Vec<T> fields",
+                    ));
+                }
+            }
+        } else {
+            // Check if it's a Vec<T> (non-u8) — use hydrate_vec_from_list
+            let vec_inner = extract_vec_inner_type(field_ty);
+            let is_vec_non_u8 = vec_inner
+                .as_ref()
+                .map_or(false, |inner| !is_u8_type(inner));
+
+            if is_vec_non_u8 {
+                let inner = vec_inner.unwrap();
+                match &attrs.missing {
+                    Some(MissingStrategy::Default) | None => quote! {
+                        #field_name: {
+                            match map.get(#loro_key) {
+                                Some(loro::ValueOrContainer::Container(loro::Container::List(list))) => {
+                                    lorosurgeon::hydrate_vec_from_list::<#inner>(&list)?
+                                }
+                                Some(_) => return Err(lorosurgeon::HydrateError::unexpected("list", "other")),
+                                None => Vec::new(),
+                            }
+                        },
+                    },
+                    Some(MissingStrategy::Function(f)) => {
+                        let func_path: syn::Path = syn::parse_str(f)?;
+                        quote! {
+                            #field_name: {
+                                match map.get(#loro_key) {
+                                    Some(loro::ValueOrContainer::Container(loro::Container::List(list))) => {
+                                        lorosurgeon::hydrate_vec_from_list::<#inner>(&list)?
+                                    }
+                                    Some(_) => return Err(lorosurgeon::HydrateError::unexpected("list", "other")),
+                                    None => #func_path(),
+                                }
+                            },
+                        }
                     }
                 }
-                None => {
-                    // Check if the type is Option — it handles missing naturally
-                    if is_option_type(field_ty) {
+            } else {
+                match &attrs.missing {
+                    Some(MissingStrategy::Default) => quote! {
+                        #field_name: lorosurgeon::hydrate_prop_or_default(map, #loro_key)?,
+                    },
+                    Some(MissingStrategy::Function(f)) => {
+                        let func_path: syn::Path = syn::parse_str(f)?;
                         quote! {
-                            #field_name: lorosurgeon::hydrate_prop_or_default(map, #loro_key)?,
+                            #field_name: lorosurgeon::hydrate_prop_or_else(map, #loro_key, #func_path)?,
                         }
-                    } else {
-                        quote! {
-                            #field_name: lorosurgeon::hydrate_prop(map, #loro_key)?,
+                    }
+                    None => {
+                        if is_option_type(field_ty) {
+                            quote! {
+                                #field_name: lorosurgeon::hydrate_prop_or_default(map, #loro_key)?,
+                            }
+                        } else {
+                            quote! {
+                                #field_name: lorosurgeon::hydrate_prop(map, #loro_key)?,
+                            }
                         }
                     }
                 }
@@ -206,6 +264,32 @@ fn is_option_type(ty: &syn::Type) -> bool {
     if let syn::Type::Path(type_path) = ty {
         if let Some(segment) = type_path.path.segments.last() {
             return segment.ident == "Option";
+        }
+    }
+    false
+}
+
+/// Extract the inner type from `Vec<T>`, returning `Some(T)` or `None`.
+fn extract_vec_inner_type(ty: &syn::Type) -> Option<&syn::Type> {
+    if let syn::Type::Path(type_path) = ty {
+        if let Some(segment) = type_path.path.segments.last() {
+            if segment.ident == "Vec" {
+                if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
+                    if let Some(syn::GenericArgument::Type(inner)) = args.args.first() {
+                        return Some(inner);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Check if a type is `u8`.
+fn is_u8_type(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(type_path) = ty {
+        if let Some(segment) = type_path.path.segments.last() {
+            return segment.ident == "u8" && segment.arguments.is_none();
         }
     }
     false

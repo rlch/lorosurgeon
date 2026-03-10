@@ -56,7 +56,7 @@ impl Hydrate for Text {
 }
 
 impl Reconcile for Text {
-    type Key<'a> = NoKey;
+    type Key = NoKey;
 
     fn reconcile<R: Reconciler>(&self, r: R) -> Result<(), ReconcileError> {
         let mut t = r.text()?;

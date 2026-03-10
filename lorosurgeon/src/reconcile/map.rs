@@ -65,7 +65,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::reconcile::{NoKey, Reconciler};
 
 impl<V: Reconcile> Reconcile for HashMap<String, V> {
-    type Key<'a> = NoKey where V: 'a;
+    type Key = NoKey;
 
     fn reconcile<R: Reconciler>(&self, r: R) -> Result<(), ReconcileError> {
         let mut m = r.map()?;
@@ -80,7 +80,7 @@ impl<V: Reconcile> Reconcile for HashMap<String, V> {
 }
 
 impl<V: Reconcile> Reconcile for BTreeMap<String, V> {
-    type Key<'a> = NoKey where V: 'a;
+    type Key = NoKey;
 
     fn reconcile<R: Reconciler>(&self, r: R) -> Result<(), ReconcileError> {
         let mut m = r.map()?;

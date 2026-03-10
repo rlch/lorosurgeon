@@ -104,7 +104,7 @@ impl<T: Hydrate> Hydrate for MaybeMissing<T> {
 }
 
 impl<T: Reconcile> Reconcile for MaybeMissing<T> {
-    type Key<'a> = NoKey where T: 'a;
+    type Key = NoKey;
 
     fn reconcile<R: Reconciler>(&self, r: R) -> Result<(), ReconcileError> {
         match self {

@@ -128,7 +128,7 @@ pub fn derive_reconcile_enum(
 
     Ok(quote! {
         impl #impl_generics lorosurgeon::Reconcile for #name #ty_generics #where_clause {
-            type Key<'a> = lorosurgeon::NoKey where Self: 'a;
+            type Key = lorosurgeon::NoKey;
 
             fn reconcile<R: lorosurgeon::Reconciler>(&self, r: R) -> Result<(), lorosurgeon::ReconcileError> {
                 match self {

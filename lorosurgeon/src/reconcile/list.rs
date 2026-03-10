@@ -58,22 +58,26 @@ pub fn reconcile_vec<T: Reconcile, R: Reconciler>(
     Ok(())
 }
 
-/// Reconcile a Vec<T> into a LoroMovableList.
+/// Reconcile a Vec<T> into a LoroMovableList using LCS-based diffing.
+///
+/// Items with `#[key]` are matched by key identity — matched items are
+/// updated in place via `set()`, preserving CRDT element identity.
+/// Items without keys use positional set/insert/delete.
 pub fn reconcile_vec_movable<T: Reconcile, R: Reconciler>(
     items: &[T],
     r: R,
 ) -> Result<(), ReconcileError> {
     let mut list_r = r.movable_list()?;
+    super::movable_list::reconcile_movable_list(items, &mut list_r)
+}
 
-    // Clear existing items
-    while list_r.len() > 0 {
-        list_r.delete(0)?;
+/// Wrapper to reconcile a `&[T]` into a `LoroMovableList` via `MapReconciler::entry()`.
+pub struct MovableVec<'a, T>(pub &'a [T]);
+
+impl<T: Reconcile> Reconcile for MovableVec<'_, T> {
+    type Key = crate::reconcile::NoKey;
+
+    fn reconcile<R: Reconciler>(&self, r: R) -> Result<(), ReconcileError> {
+        reconcile_vec_movable(self.0, r)
     }
-
-    // Insert all new items
-    for (i, item) in items.iter().enumerate() {
-        list_r.insert(i, item)?;
-    }
-
-    Ok(())
 }

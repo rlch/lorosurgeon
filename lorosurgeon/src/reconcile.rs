@@ -6,7 +6,8 @@ pub(crate) mod map;
 pub(crate) mod movable_list;
 
 use loro::{
-    ContainerTrait, LoroList, LoroMap, LoroMovableList, LoroText, LoroValue, ValueOrContainer,
+    Container, ContainerTrait, LoroList, LoroMap, LoroMovableList, LoroText, LoroValue,
+    ValueOrContainer,
 };
 
 use crate::error::ReconcileError;
@@ -39,22 +40,22 @@ impl<K> LoadKey<K> {
 /// Write a Rust value into a Loro location via a Reconciler.
 pub trait Reconcile {
     /// The identity key type for list diffing. Defaults to NoKey (positional).
-    type Key<'a>: PartialEq
-    where
-        Self: 'a;
+    /// Must be owned — keys are stored for comparison during LCS diffing.
+    type Key: PartialEq;
 
     /// Write this value into the given reconciler location.
     fn reconcile<R: Reconciler>(&self, reconciler: R) -> Result<(), ReconcileError>;
 
     /// Extract the identity key from this value.
-    fn key(&self) -> LoadKey<Self::Key<'_>> {
+    fn key(&self) -> LoadKey<Self::Key> {
         LoadKey::NoKey
     }
 
     /// Extract the identity key from a Loro source (for pre-diffing).
+    /// Only hydrates the key, not the full value — used by LCS list reconciliation.
     fn hydrate_key(
         _source: &ValueOrContainer,
-    ) -> Result<LoadKey<Self::Key<'_>>, ReconcileError> {
+    ) -> Result<LoadKey<Self::Key>, ReconcileError> {
         Ok(LoadKey::NoKey)
     }
 }
@@ -155,6 +156,21 @@ impl PropReconciler {
         };
         Ok(container)
     }
+
+    /// For MovableListSet, try to get the existing container at this index
+    /// to reconcile into it (preserving CRDT identity for sub-fields).
+    fn try_get_existing_map(&self) -> Option<LoroMap> {
+        match &self.action {
+            PropAction::MovableListSet { list, index } => {
+                if let Some(ValueOrContainer::Container(Container::Map(m))) = list.get(*index) {
+                    Some(m)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
 }
 
 impl Reconciler for PropReconciler {
@@ -183,6 +199,11 @@ impl Reconciler for PropReconciler {
     }
 
     fn map(self) -> Result<MapReconciler, ReconcileError> {
+        // For MovableListSet, reuse the existing map container to preserve
+        // CRDT identity — enables field-level concurrent merges within list items.
+        if let Some(existing) = self.try_get_existing_map() {
+            return Ok(MapReconciler { map: existing });
+        }
         let m = self.get_or_create_container(LoroMap::new())?;
         Ok(MapReconciler { map: m })
     }

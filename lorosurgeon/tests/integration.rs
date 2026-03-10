@@ -653,6 +653,288 @@ fn test_derive_flatten() {
     assert_eq!(hydrated, elem);
 }
 
+// ── MovableList LCS reconciliation ───────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct KeyedItem {
+    #[key]
+    id: String,
+    value: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct PositionalMovable {
+    #[loro(movable)]
+    items: Vec<i64>,
+}
+
+#[test]
+fn test_movable_list_positional_basic() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = PositionalMovable { items: vec![10, 20, 30] };
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = PositionalMovable::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v1);
+
+    // Update: set overlap, delete extras, append new
+    let v2 = PositionalMovable { items: vec![10, 25, 30, 40] };
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = PositionalMovable::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v2);
+}
+
+#[test]
+fn test_movable_list_positional_shrink() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = PositionalMovable { items: vec![1, 2, 3, 4, 5] };
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Shrink to [1, 2]
+    let v2 = PositionalMovable { items: vec![1, 2] };
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = PositionalMovable::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v2);
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct MovableContainer {
+    #[loro(movable)]
+    items: Vec<KeyedItem>,
+}
+
+#[test]
+fn test_movable_list_keyed_insert_delete() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = MovableContainer {
+        items: vec![
+            KeyedItem { id: "a".into(), value: 1 },
+            KeyedItem { id: "b".into(), value: 2 },
+            KeyedItem { id: "c".into(), value: 3 },
+        ],
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = MovableContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v1);
+
+    // Remove "b", add "d"
+    let v2 = MovableContainer {
+        items: vec![
+            KeyedItem { id: "a".into(), value: 1 },
+            KeyedItem { id: "c".into(), value: 3 },
+            KeyedItem { id: "d".into(), value: 4 },
+        ],
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = MovableContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v2);
+}
+
+#[test]
+fn test_movable_list_keyed_reorder() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = MovableContainer {
+        items: vec![
+            KeyedItem { id: "a".into(), value: 1 },
+            KeyedItem { id: "b".into(), value: 2 },
+            KeyedItem { id: "c".into(), value: 3 },
+        ],
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Reverse order
+    let v2 = MovableContainer {
+        items: vec![
+            KeyedItem { id: "c".into(), value: 3 },
+            KeyedItem { id: "b".into(), value: 2 },
+            KeyedItem { id: "a".into(), value: 1 },
+        ],
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = MovableContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v2);
+}
+
+#[test]
+fn test_movable_list_keyed_update_in_place() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = MovableContainer {
+        items: vec![
+            KeyedItem { id: "a".into(), value: 1 },
+            KeyedItem { id: "b".into(), value: 2 },
+        ],
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Update values but keep same keys — should use set() (identity-preserving)
+    let v2 = MovableContainer {
+        items: vec![
+            KeyedItem { id: "a".into(), value: 10 },
+            KeyedItem { id: "b".into(), value: 20 },
+        ],
+    };
+
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = MovableContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v2);
+}
+
+#[test]
+fn test_movable_list_keyed_concurrent_reorder_merge() {
+    // Two peers reorder items concurrently — CRDT should merge
+    let doc1 = LoroDoc::new();
+    let map1 = doc1.get_map("root");
+
+    let initial = MovableContainer {
+        items: vec![
+            KeyedItem { id: "a".into(), value: 1 },
+            KeyedItem { id: "b".into(), value: 2 },
+            KeyedItem { id: "c".into(), value: 3 },
+        ],
+    };
+
+    let reconciler = RootReconciler::new(map1.clone());
+    initial.reconcile(reconciler).unwrap();
+    doc1.commit();
+
+    // Fork
+    let bytes = doc1.export(loro::ExportMode::snapshot()).unwrap();
+    let doc2 = LoroDoc::new();
+    doc2.import_batch(&[bytes.into()]).unwrap();
+    let map2 = doc2.get_map("root");
+
+    // Peer 1: update "a" value
+    let v1 = MovableContainer {
+        items: vec![
+            KeyedItem { id: "a".into(), value: 100 },
+            KeyedItem { id: "b".into(), value: 2 },
+            KeyedItem { id: "c".into(), value: 3 },
+        ],
+    };
+    let reconciler = RootReconciler::new(map1.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc1.commit();
+
+    // Peer 2: update "c" value
+    let v2 = MovableContainer {
+        items: vec![
+            KeyedItem { id: "a".into(), value: 1 },
+            KeyedItem { id: "b".into(), value: 2 },
+            KeyedItem { id: "c".into(), value: 300 },
+        ],
+    };
+    let reconciler = RootReconciler::new(map2.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc2.commit();
+
+    // Merge
+    let update1 = doc1.export(loro::ExportMode::all_updates()).unwrap();
+    let update2 = doc2.export(loro::ExportMode::all_updates()).unwrap();
+    let merged = LoroDoc::new();
+    merged.import_batch(&[update1.into(), update2.into()]).unwrap();
+
+    let result = MovableContainer::hydrate_map(&merged.get_map("root")).unwrap();
+    assert_eq!(result.items.len(), 3);
+
+    // Both field-level updates should be preserved (set() preserves CRDT identity)
+    let a = result.items.iter().find(|i| i.id == "a").unwrap();
+    let c = result.items.iter().find(|i| i.id == "c").unwrap();
+    assert_eq!(a.value, 100);
+    assert_eq!(c.value, 300);
+}
+
+#[test]
+fn test_movable_list_empty_to_nonempty() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = MovableContainer { items: vec![] };
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = MovableContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated.items.len(), 0);
+
+    // Add items
+    let v2 = MovableContainer {
+        items: vec![
+            KeyedItem { id: "x".into(), value: 42 },
+        ],
+    };
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = MovableContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v2);
+}
+
+#[test]
+fn test_movable_list_nonempty_to_empty() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = MovableContainer {
+        items: vec![
+            KeyedItem { id: "a".into(), value: 1 },
+            KeyedItem { id: "b".into(), value: 2 },
+        ],
+    };
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let v2 = MovableContainer { items: vec![] };
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = MovableContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated.items.len(), 0);
+}
+
 // ── Phase 10: Struct with all features combined ─────────────────────────
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default)]

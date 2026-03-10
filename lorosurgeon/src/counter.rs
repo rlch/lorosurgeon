@@ -68,7 +68,7 @@ mod inner {
     }
 
     impl Reconcile for Counter {
-        type Key<'a> = NoKey;
+        type Key = NoKey;
 
         fn reconcile<R: Reconciler>(&self, r: R) -> Result<(), ReconcileError> {
             let mut c = r.counter().map_err(Into::into)?;

@@ -32,7 +32,7 @@ pub fn derive_reconcile_struct(
 
     Ok(quote! {
         impl #impl_generics lorosurgeon::Reconcile for #name #ty_generics #where_clause {
-            type Key<'a> = #key_type where Self: 'a;
+            type Key = #key_type;
 
             #reconcile_body
             #key_fn
@@ -96,6 +96,14 @@ fn derive_named_struct(
                     lorosurgeon::reconcile_vec_movable(&self.#field_name, reconciler)?;
                 }
             }
+        } else if is_vec_non_u8(&field.ty) {
+            // Vec<T> (non-u8) — use reconcile_vec (LoroList clear+rewrite)
+            quote! {
+                {
+                    let reconciler = lorosurgeon::PropReconciler::map_put(m.map.clone(), #loro_key.to_string());
+                    lorosurgeon::reconcile_vec(&self.#field_name, reconciler)?;
+                }
+            }
         } else {
             quote! {
                 m.entry(#loro_key, &self.#field_name)?;
@@ -116,31 +124,25 @@ fn derive_named_struct(
     let (key_type, key_fn, hydrate_key_fn) = if let Some((key_name, key_ty)) = key_field {
         let key_str = key_name.to_string();
         (
-            quote! { <#key_ty as lorosurgeon::Reconcile>::Key<'a> },
+            // The key type IS the field type itself (String, i64, etc.)
+            quote! { #key_ty },
             quote! {
-                fn key(&self) -> lorosurgeon::LoadKey<Self::Key<'_>> {
-                    lorosurgeon::LoadKey::Found(self.#key_name.key().into_found().unwrap_or_else(|| {
-                        // For simple key types (String, i64, etc.), just clone
-                        unreachable!("key field should have a Found key")
-                    }))
+                fn key(&self) -> lorosurgeon::LoadKey<Self::Key> {
+                    lorosurgeon::LoadKey::Found(self.#key_name.clone())
                 }
             },
             quote! {
-                fn hydrate_key(source: &loro::ValueOrContainer) -> Result<lorosurgeon::LoadKey<Self::Key<'_>>, lorosurgeon::ReconcileError> {
+                fn hydrate_key(source: &loro::ValueOrContainer) -> Result<lorosurgeon::LoadKey<Self::Key>, lorosurgeon::ReconcileError> {
                     match source {
                         loro::ValueOrContainer::Container(loro::Container::Map(map)) => {
                             match map.get(#key_str) {
                                 Some(voc) => {
-                                    // Try to hydrate the key from the value
                                     Ok(lorosurgeon::LoadKey::Found(
                                         <#key_ty as lorosurgeon::Hydrate>::hydrate(&voc)
                                             .map_err(|_| lorosurgeon::ReconcileError::TypeMismatch {
                                                 expected: "key value",
                                                 found: "incompatible type",
                                             })?
-                                            .key()
-                                            .into_found()
-                                            .unwrap_or_else(|| unreachable!())
                                     ))
                                 }
                                 None => Ok(lorosurgeon::LoadKey::KeyNotFound),
@@ -176,9 +178,9 @@ fn derive_tuple_struct(
         };
         Ok((
             reconcile_body,
-            quote! { <#inner_ty as lorosurgeon::Reconcile>::Key<'a> },
+            quote! { <#inner_ty as lorosurgeon::Reconcile>::Key },
             quote! {
-                fn key(&self) -> lorosurgeon::LoadKey<Self::Key<'_>> {
+                fn key(&self) -> lorosurgeon::LoadKey<Self::Key> {
                     self.0.key()
                 }
             },
@@ -207,6 +209,30 @@ fn derive_tuple_struct(
             TokenStream::new(),
         ))
     }
+}
+
+/// Check if a type is `Vec<T>` where T is not `u8`.
+fn is_vec_non_u8(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(type_path) = ty {
+        if let Some(segment) = type_path.path.segments.last() {
+            if segment.ident == "Vec" {
+                if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
+                    if let Some(syn::GenericArgument::Type(inner)) = args.args.first() {
+                        // Check if inner is u8
+                        if let syn::Type::Path(inner_path) = inner {
+                            if let Some(seg) = inner_path.path.segments.last() {
+                                if seg.ident == "u8" && seg.arguments.is_none() {
+                                    return false;
+                                }
+                            }
+                        }
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
 }
 
 fn derive_unit_struct(
