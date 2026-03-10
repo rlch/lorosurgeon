@@ -1,5 +1,7 @@
 //! MovableListReconciler — reconcile Vec<T> into a LoroMovableList with LCS diffing.
 
+use std::collections::HashMap;
+
 use loro::ValueOrContainer;
 
 use crate::error::ReconcileError;
@@ -103,7 +105,7 @@ fn reconcile_positional<T: Reconcile>(
 /// Key-based reconciliation.
 ///
 /// Strategy:
-/// 1. Hydrate keys from old (Loro) side, extract keys from new (Rust) side.
+/// 1. Hydrate keys from old (Loro) side into a HashMap for O(1) lookup.
 /// 2. Match new items to old items by key identity.
 /// 3. Delete unmatched old items (back-to-front to preserve indices).
 /// 4. Build target order using a tracking vec. For each new item:
@@ -117,7 +119,8 @@ fn reconcile_keyed<T: Reconcile>(
     list_r: &mut MovableListReconciler,
     old_len: usize,
 ) -> Result<(), ReconcileError> {
-    // Hydrate keys from old (Loro) side.
+    // SoA layout: parallel arrays for old item data.
+    // old_keys[i] = hydrated key for old item at index i (None if key extraction failed).
     let old_keys: Vec<Option<T::Key>> = (0..old_len)
         .map(|i| {
             list_r
@@ -127,20 +130,28 @@ fn reconcile_keyed<T: Reconcile>(
         })
         .collect();
 
-    // Extract keys from new (Rust) side.
-    let new_keys: Vec<Option<T::Key>> = items
-        .iter()
-        .map(|item| item.key().into_found())
-        .collect();
+    // Build key → old_index map for O(1) matching (SoA: index array separate from keys).
+    // For duplicate keys, stores all indices; we consume them in order.
+    let mut key_to_old: HashMap<&T::Key, Vec<usize>> = HashMap::with_capacity(old_len);
+    for (i, key) in old_keys.iter().enumerate() {
+        if let Some(k) = key {
+            key_to_old.entry(k).or_default().push(i);
+        }
+    }
 
-    // Match each new item to an old item by key.
+    // SoA layout: parallel arrays for new→old mapping.
+    // new_to_old[i] = Some(old_index) if matched, None if new item.
+    // old_used[i] = true if old item at index i was matched.
     let mut old_used = vec![false; old_len];
     let mut new_to_old: Vec<Option<usize>> = Vec::with_capacity(items.len());
 
-    for new_key in &new_keys {
-        let matched = new_key.as_ref().and_then(|nk| {
-            (0..old_len).find(|&i| {
-                !old_used[i] && (old_keys[i].as_ref() == Some(nk))
+    for item in items {
+        let matched = item.key().into_found().and_then(|nk| {
+            key_to_old.get_mut(&nk).and_then(|indices| {
+                // Find the first unused index for this key.
+                indices.iter().position(|&idx| !old_used[idx]).map(|pos| {
+                    indices[pos] // Don't remove — just mark used via old_used.
+                })
             })
         });
 
@@ -153,11 +164,10 @@ fn reconcile_keyed<T: Reconcile>(
     }
 
     // Phase 1: Delete unmatched old items (back-to-front).
-    let delete_indices: Vec<usize> = (0..old_len)
-        .filter(|i| !old_used[*i])
-        .collect();
-    for &idx in delete_indices.iter().rev() {
-        list_r.delete(idx)?;
+    for idx in (0..old_len).rev() {
+        if !old_used[idx] {
+            list_r.delete(idx)?;
+        }
     }
 
     // Build a tracking vec: current_order[i] = original old_index of item at position i.
@@ -188,12 +198,11 @@ fn reconcile_keyed<T: Reconcile>(
             None => {
                 // New item — insert at target position.
                 list_r.insert(target_idx, &items[target_idx])?;
-                // Use a sentinel value (usize::MAX) since this is a new item with no old_idx.
+                // Sentinel value since this is a new item with no old_idx.
                 current_order.insert(target_idx, usize::MAX);
             }
         }
     }
 
-    Ok(()
-    )
+    Ok(())
 }

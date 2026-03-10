@@ -996,6 +996,71 @@ fn test_noop_detection_partial_change() {
     assert_eq!(hydrated, state2);
 }
 
+// ── Stale heads detection ───────────────────────────────────────────────
+
+#[test]
+fn test_version_guard_no_change() {
+    let doc = LoroDoc::new();
+    let guard = lorosurgeon::VersionGuard::capture(&doc);
+    // No changes — check should pass
+    assert!(guard.check(&doc).is_ok());
+}
+
+#[test]
+fn test_version_guard_detects_concurrent_commit() {
+    let doc = LoroDoc::new();
+
+    let config = Config {
+        version: 1,
+        name: "initial".to_string(),
+    };
+    config.to_doc(&doc).unwrap();
+    doc.commit();
+
+    // Capture version after initial commit
+    let guard = lorosurgeon::VersionGuard::capture(&doc);
+
+    // Simulate concurrent modification
+    let map = doc.get_map("config");
+    map.insert("name", "concurrent-change").unwrap();
+    doc.commit();
+
+    // Guard should detect the change
+    let result = guard.check(&doc);
+    assert!(result.is_err());
+    assert!(matches!(
+        result.unwrap_err(),
+        lorosurgeon::ReconcileError::StaleHeads
+    ));
+}
+
+#[test]
+fn test_version_guard_workflow() {
+    let doc = LoroDoc::new();
+
+    let initial = Config {
+        version: 1,
+        name: "test".to_string(),
+    };
+    initial.to_doc(&doc).unwrap();
+    doc.commit();
+
+    // Read-modify-write with version guard
+    let guard = lorosurgeon::VersionGuard::capture(&doc);
+    let mut state = Config::from_doc(&doc).unwrap();
+    state.version = 2;
+    state.name = "updated".to_string();
+
+    // No concurrent modification — guard passes
+    guard.check(&doc).unwrap();
+    state.to_doc(&doc).unwrap();
+    doc.commit();
+
+    let result = Config::from_doc(&doc).unwrap();
+    assert_eq!(result.version, 2);
+    assert_eq!(result.name, "updated");
+}
+
 // ── Phase 10: Struct with all features combined ─────────────────────────
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default)]

@@ -10,12 +10,14 @@ use loro::{
     ValueOrContainer,
 };
 
+use std::hash::Hash;
+
 use crate::error::ReconcileError;
 
 // ── Key types ───────────────────────────────────────────────────────────
 
 /// Sentinel for types with no identity key.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NoKey;
 
 /// Result of extracting a key from a Loro value.
@@ -41,7 +43,7 @@ impl<K> LoadKey<K> {
 pub trait Reconcile {
     /// The identity key type for list diffing. Defaults to NoKey (positional).
     /// Must be owned — keys are stored for comparison during LCS diffing.
-    type Key: PartialEq;
+    type Key: PartialEq + Eq + Hash;
 
     /// Write this value into the given reconciler location.
     fn reconcile<R: Reconciler>(&self, reconciler: R) -> Result<(), ReconcileError>;

@@ -1,6 +1,6 @@
 //! DocSync trait — replacement for the Synced trait.
 
-use loro::LoroDoc;
+use loro::{LoroDoc, VersionVector};
 
 use crate::error::{HydrateError, ReconcileError};
 use crate::hydrate::Hydrate;
@@ -25,5 +25,49 @@ pub trait DocSync: Hydrate + Reconcile {
         let map = doc.get_map(Self::ROOT_KEY);
         let reconciler = RootReconciler::new(map);
         self.reconcile(reconciler)
+    }
+}
+
+/// A version snapshot captured before hydration, used to detect stale heads.
+///
+/// If the document is modified between hydration and reconciliation (e.g., by a
+/// concurrent thread committing changes), `check()` returns `ReconcileError::StaleHeads`.
+///
+/// # Example
+/// ```no_run
+/// use lorosurgeon::{DocSync, VersionGuard};
+/// use loro::LoroDoc;
+///
+/// # #[derive(lorosurgeon::Hydrate, lorosurgeon::Reconcile)]
+/// # #[loro(root = "data")]
+/// # struct MyState { value: i64 }
+///
+/// let doc = LoroDoc::new();
+/// let guard = VersionGuard::capture(&doc);
+/// let mut state = MyState::from_doc(&doc).unwrap();
+/// state.value = 42;
+/// guard.check(&doc).unwrap(); // Fails if doc was modified externally
+/// state.to_doc(&doc).unwrap();
+/// doc.commit();
+/// ```
+pub struct VersionGuard {
+    vv: VersionVector,
+}
+
+impl VersionGuard {
+    /// Capture the document's current version vector.
+    pub fn capture(doc: &LoroDoc) -> Self {
+        Self {
+            vv: doc.oplog_vv(),
+        }
+    }
+
+    /// Check if the document's version vector has changed since capture.
+    /// Returns `ReconcileError::StaleHeads` if it has.
+    pub fn check(&self, doc: &LoroDoc) -> Result<(), ReconcileError> {
+        if doc.oplog_vv() != self.vv {
+            return Err(ReconcileError::StaleHeads);
+        }
+        Ok(())
     }
 }

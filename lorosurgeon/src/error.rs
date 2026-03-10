@@ -51,4 +51,7 @@ pub enum ReconcileError {
         expected: &'static str,
         found: &'static str,
     },
+
+    #[error("stale heads: document was modified during reconciliation")]
+    StaleHeads,
 }

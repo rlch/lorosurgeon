@@ -15,7 +15,7 @@ pub mod text;
 pub use lorosurgeon_derive::{Hydrate, Reconcile};
 
 // Re-export core traits
-pub use crate::doc_sync::DocSync;
+pub use crate::doc_sync::{DocSync, VersionGuard};
 pub use crate::hydrate::Hydrate;
 pub use crate::reconcile::{
     ListReconciler, LoadKey, MapReconciler, MovableListReconciler, NoKey, PropReconciler,
