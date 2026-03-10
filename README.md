@@ -1,5 +1,10 @@
 # lorosurgeon
 
+[![Crates.io](https://img.shields.io/crates/v/lorosurgeon.svg)](https://crates.io/crates/lorosurgeon)
+[![docs.rs](https://docs.rs/lorosurgeon/badge.svg)](https://docs.rs/lorosurgeon)
+[![CI](https://github.com/rlch/lorosurgeon/actions/workflows/ci.yml/badge.svg)](https://github.com/rlch/lorosurgeon/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Derive macros for [Loro](https://loro.dev) CRDT containers — the Loro equivalent of [autosurgeon](https://github.com/automerge/autosurgeon) for Automerge.
 
 `#[derive(Hydrate, Reconcile)]` generates field-level serialization between Rust types and Loro containers. Only modified fields produce CRDT operations.
