@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+# Changelog
+
+
+### Documentation
+
+- add initial changelogs for release-plz
+- comprehensive crate docs, clean public API surface
 
 ## [0.1.0] - 2026-03-10
 

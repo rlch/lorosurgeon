@@ -1,6 +1,14 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+# Changelog
+
+
+### Documentation
+
+- add initial changelogs for release-plz
+- add crates.io, docs.rs, CI, and license badges to README
+- comprehensive crate docs, clean public API surface
 
 ## [0.1.0] - 2026-03-10
 
