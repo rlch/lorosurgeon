@@ -41,5 +41,5 @@ pub use crate::hydrate::{
 pub use crate::hydrate::impls::{hydrate_keyed_map, hydrate_vec_from_list, hydrate_vec_from_movable_list};
 
 // Re-export list reconcile helpers for derive macro codegen
-pub use crate::reconcile::list::{reconcile_vec, reconcile_vec_movable};
+pub use crate::reconcile::list::{reconcile_vec, reconcile_vec_movable, reconcile_vec_simple};
 pub use crate::reconcile::map::reconcile_keyed_map;

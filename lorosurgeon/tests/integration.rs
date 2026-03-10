@@ -1106,6 +1106,203 @@ fn test_full_featured_struct() {
     assert_eq!(hydrated, state);
 }
 
+// ── LoroList LCS diffing ─────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct ListContainer {
+    items: Vec<i64>,
+}
+
+#[test]
+fn test_list_lcs_basic_roundtrip() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = ListContainer { items: vec![1, 2, 3] };
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = ListContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v1);
+}
+
+#[test]
+fn test_list_lcs_append() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = ListContainer { items: vec![1, 2, 3] };
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Append — LCS should skip [1,2,3] and only insert [4,5]
+    let v2 = ListContainer { items: vec![1, 2, 3, 4, 5] };
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = ListContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v2);
+}
+
+#[test]
+fn test_list_lcs_prepend() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = ListContainer { items: vec![3, 4, 5] };
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Prepend — LCS should insert [1,2] and skip [3,4,5]
+    let v2 = ListContainer { items: vec![1, 2, 3, 4, 5] };
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = ListContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v2);
+}
+
+#[test]
+fn test_list_lcs_middle_insert() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = ListContainer { items: vec![1, 2, 5, 6] };
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Insert in middle — LCS should skip [1,2], insert [3,4], skip [5,6]
+    let v2 = ListContainer { items: vec![1, 2, 3, 4, 5, 6] };
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = ListContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v2);
+}
+
+#[test]
+fn test_list_lcs_delete() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = ListContainer { items: vec![1, 2, 3, 4, 5] };
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Remove middle — LCS should skip [1,2], delete [3], skip [4,5]
+    let v2 = ListContainer { items: vec![1, 2, 4, 5] };
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = ListContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v2);
+}
+
+#[test]
+fn test_list_lcs_no_change_no_ops() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = ListContainer { items: vec![1, 2, 3] };
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let version_before = doc.oplog_vv();
+
+    // Reconcile identical list — should produce zero ops
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let version_after = doc.oplog_vv();
+    assert_eq!(version_before, version_after, "Identical list should produce zero ops");
+}
+
+#[test]
+fn test_list_lcs_empty_to_nonempty() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = ListContainer { items: vec![] };
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let v2 = ListContainer { items: vec![1, 2, 3] };
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = ListContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v2);
+}
+
+#[test]
+fn test_list_lcs_nonempty_to_empty() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = ListContainer { items: vec![1, 2, 3] };
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let v2 = ListContainer { items: vec![] };
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = ListContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v2);
+}
+
+#[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
+struct NestedListContainer {
+    items: Vec<Position>,
+}
+
+#[test]
+fn test_list_lcs_nested_structs() {
+    let doc = LoroDoc::new();
+    let map = doc.get_map("root");
+
+    let v1 = NestedListContainer {
+        items: vec![
+            Position { x: 1.0, y: 2.0 },
+            Position { x: 3.0, y: 4.0 },
+            Position { x: 5.0, y: 6.0 },
+        ],
+    };
+    let reconciler = RootReconciler::new(map.clone());
+    v1.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    // Append one, remove first
+    let v2 = NestedListContainer {
+        items: vec![
+            Position { x: 3.0, y: 4.0 },
+            Position { x: 5.0, y: 6.0 },
+            Position { x: 7.0, y: 8.0 },
+        ],
+    };
+    let reconciler = RootReconciler::new(map.clone());
+    v2.reconcile(reconciler).unwrap();
+    doc.commit();
+
+    let hydrated = NestedListContainer::hydrate_map(&map).unwrap();
+    assert_eq!(hydrated, v2);
+}
+
 // ── Gap 1: Box<T> + Cow<'a, T> round-trips ──────────────────────────────
 
 #[test]

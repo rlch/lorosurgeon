@@ -99,7 +99,7 @@ impl Reconcile for &str {
 impl<T: Reconcile> Reconcile for &[T] {
     type Key = NoKey;
     fn reconcile<R: Reconciler>(&self, r: R) -> Result<(), ReconcileError> {
-        super::list::reconcile_vec(self, r)
+        super::list::reconcile_vec_simple(self, r)
     }
 }
 
