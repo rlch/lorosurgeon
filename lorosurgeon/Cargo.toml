@@ -3,7 +3,12 @@ name = "lorosurgeon"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Autosurgeon-style derive macros for Loro CRDT containers"
+description = "Derive macros for bidirectional serialization between Rust types and Loro CRDT containers"
+repository = "https://github.com/rlch/lorosurgeon"
+documentation = "https://docs.rs/lorosurgeon"
+keywords = ["loro", "crdt", "derive", "serialization", "automerge"]
+categories = ["encoding", "data-structures"]
+readme = "../README.md"
 
 [lib]
 crate-type = ["rlib"]

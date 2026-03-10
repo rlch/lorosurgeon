@@ -1,4 +1,13 @@
-//! Hydrate trait — read Rust types from Loro containers.
+//! Read Rust types from Loro containers.
+//!
+//! The [`Hydrate`] trait converts Loro values and containers into Rust types.
+//! It uses a visitor-style dispatch: the default [`Hydrate::hydrate`] method
+//! inspects the [`ValueOrContainer`] and calls the
+//! appropriate type-specific method (`hydrate_map`, `hydrate_i64`, etc.).
+//!
+//! Implementations are provided for all scalar types, `Option<T>`, `Vec<T>`,
+//! `HashMap<String, V>`, `Box<T>`, `Cow<T>`, and `serde_json::Value`.
+//! Use `#[derive(Hydrate)]` to generate implementations for your own types.
 
 pub mod impls;
 
@@ -9,8 +18,19 @@ use loro::{
 use crate::error::HydrateError;
 
 /// Read a Rust value from a Loro container or value.
+///
+/// # Implementing
+///
+/// Override the method matching your Loro storage type:
+///
+/// - Scalars: `hydrate_bool`, `hydrate_i64`, `hydrate_f64`, `hydrate_string`, `hydrate_binary`
+/// - Containers: `hydrate_map`, `hydrate_list`, `hydrate_movable_list`, `hydrate_text`
+/// - Null: `hydrate_null` (used by `Option<T>` and `MaybeMissing<T>`)
+///
+/// The default [`hydrate`](Hydrate::hydrate) dispatches automatically based on the
+/// Loro value type — you rarely need to override it.
 pub trait Hydrate: Sized {
-    /// Primary dispatch — reads from ValueOrContainer at a location.
+    /// Primary dispatch — inspects the source and calls the appropriate typed method.
     fn hydrate(source: &ValueOrContainer) -> Result<Self, HydrateError> {
         match source {
             ValueOrContainer::Value(v) => Self::hydrate_value(v),
@@ -40,46 +60,56 @@ pub trait Hydrate: Sized {
         }
     }
 
+    /// Read from a [`LoroMap`]. Override for structs and map-like types.
     fn hydrate_map(map: &LoroMap) -> Result<Self, HydrateError> {
         let _ = map;
         Err(HydrateError::unexpected("other", "map"))
     }
 
+    /// Read from a [`LoroList`]. Override for `Vec<T>` and tuple structs.
     fn hydrate_list(list: &LoroList) -> Result<Self, HydrateError> {
         let _ = list;
         Err(HydrateError::unexpected("other", "list"))
     }
 
+    /// Read from a [`LoroMovableList`]. Override for `#[loro(movable)]` vecs.
     fn hydrate_movable_list(list: &LoroMovableList) -> Result<Self, HydrateError> {
         let _ = list;
         Err(HydrateError::unexpected("other", "movable_list"))
     }
 
+    /// Read from a [`LoroText`]. Override for [`Text`](crate::Text).
     fn hydrate_text(text: &LoroText) -> Result<Self, HydrateError> {
         let _ = text;
         Err(HydrateError::unexpected("other", "text"))
     }
 
+    /// Read from a null value. Used by `Option<T>` → `None` and `MaybeMissing<T>` → `Missing`.
     fn hydrate_null() -> Result<Self, HydrateError> {
         Err(HydrateError::unexpected("other", "null"))
     }
 
+    /// Read from a boolean value.
     fn hydrate_bool(_b: bool) -> Result<Self, HydrateError> {
         Err(HydrateError::unexpected("other", "bool"))
     }
 
+    /// Read from a 64-bit integer. Used by all integer types (`i8`–`i64`, `u8`–`u64`, `usize`).
     fn hydrate_i64(_i: i64) -> Result<Self, HydrateError> {
         Err(HydrateError::unexpected("other", "i64"))
     }
 
+    /// Read from a 64-bit float. Used by `f32` and `f64`.
     fn hydrate_f64(_f: f64) -> Result<Self, HydrateError> {
         Err(HydrateError::unexpected("other", "f64"))
     }
 
+    /// Read from a string value.
     fn hydrate_string(_s: &str) -> Result<Self, HydrateError> {
         Err(HydrateError::unexpected("other", "string"))
     }
 
+    /// Read from binary data. Used by `Vec<u8>` and [`ByteArray<N>`](crate::ByteArray).
     fn hydrate_binary(_b: &[u8]) -> Result<Self, HydrateError> {
         Err(HydrateError::unexpected("other", "binary"))
     }

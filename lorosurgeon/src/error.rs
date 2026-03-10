@@ -1,4 +1,7 @@
-//! Error types for hydration and reconciliation.
+//! Error types for [`Hydrate`](crate::Hydrate) and [`Reconcile`](crate::Reconcile) operations.
+//!
+//! Both error types wrap [`loro::LoroError`] and add domain-specific variants
+//! for type mismatches, missing properties, overflow, and JSON failures.
 
 #[derive(Debug, thiserror::Error)]
 pub enum HydrateError {

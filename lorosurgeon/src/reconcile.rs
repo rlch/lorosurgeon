@@ -1,9 +1,27 @@
-//! Reconcile trait — write Rust types into Loro containers.
+//! Write Rust types into Loro containers.
+//!
+//! The [`Reconcile`] trait writes Rust values into Loro via a [`Reconciler`],
+//! which abstracts over the target location (map key, list index, document root).
+//! The reconciler handles no-op detection — identical scalar values produce zero
+//! CRDT operations.
+//!
+//! Implementations are provided for all scalar types, `Option<T>`, `Vec<T>`,
+//! `HashMap<String, V>`, `Box<T>`, `Cow<T>`, and `serde_json::Value`.
+//! Use `#[derive(Reconcile)]` to generate implementations for your own types.
+//!
+//! # Sub-reconcilers
+//!
+//! When writing composite types, the reconciler returns typed sub-reconcilers:
+//!
+//! - [`MapReconciler`] — write fields into a [`LoroMap`]
+//! - [`ListReconciler`] — insert/delete items in a [`LoroList`]
+//! - [`MovableListReconciler`] — insert/delete/move items in a [`LoroMovableList`]
+//! - [`TextReconciler`] — update text content in a [`LoroText`]
 
 pub(crate) mod impls;
 pub mod list;
-pub(crate) mod map;
-pub(crate) mod movable_list;
+pub mod map;
+pub mod movable_list;
 
 use loro::{
     Container, ContainerTrait, LoroList, LoroMap, LoroMovableList, LoroText, LoroValue,
@@ -16,15 +34,26 @@ use crate::error::ReconcileError;
 
 // ── Key types ───────────────────────────────────────────────────────────
 
-/// Sentinel for types with no identity key.
+/// Sentinel type for [`Reconcile::Key`] when a type has no identity key.
+///
+/// This is the default — types without `#[key]` use positional diffing.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NoKey;
 
-/// Result of extracting a key from a Loro value.
+/// Result of extracting an identity key from a Loro value or Rust value.
+///
+/// Used by movable list reconciliation to match old and new items by key.
+///
+/// - `NoKey` — type doesn't use keys (positional diffing)
+/// - `KeyNotFound` — type uses keys but this value's key couldn't be extracted
+/// - `Found(K)` — successfully extracted key
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LoadKey<K> {
+    /// Type doesn't use identity keys.
     NoKey,
+    /// Type uses keys but extraction failed for this value.
     KeyNotFound,
+    /// Successfully extracted key.
     Found(K),
 }
 
@@ -39,22 +68,36 @@ impl<K> LoadKey<K> {
 
 // ── Reconcile trait ─────────────────────────────────────────────────────
 
-/// Write a Rust value into a Loro location via a Reconciler.
+/// Write a Rust value into a Loro location via a [`Reconciler`].
+///
+/// # Implementing
+///
+/// Call the appropriate method on the reconciler to write your value:
+///
+/// - Scalars: `r.boolean(v)`, `r.i64(v)`, `r.f64(v)`, `r.str(v)`, `r.bytes(v)`, `r.null()`
+/// - Map (structs): `r.map()` → [`MapReconciler`] → `entry(key, &value)`
+/// - List: `r.list()` → [`ListReconciler`] → `insert`/`delete`
+/// - Text: `r.text()` → [`TextReconciler`] → `update(text)`
+///
+/// # Identity Keys
+///
+/// Types with `#[key]` fields participate in identity-based list diffing on
+/// [`LoroMovableList`]. Override [`key()`](Reconcile::key) and
+/// [`hydrate_key()`](Reconcile::hydrate_key) to enable this.
 pub trait Reconcile {
-    /// The identity key type for list diffing. Defaults to NoKey (positional).
-    /// Must be owned — keys are stored for comparison during LCS diffing.
+    /// The identity key type for list diffing. [`NoKey`] means positional diffing.
     type Key: PartialEq + Eq + Hash;
 
     /// Write this value into the given reconciler location.
     fn reconcile<R: Reconciler>(&self, reconciler: R) -> Result<(), ReconcileError>;
 
-    /// Extract the identity key from this value.
+    /// Extract the identity key from this Rust value.
     fn key(&self) -> LoadKey<Self::Key> {
         LoadKey::NoKey
     }
 
-    /// Extract the identity key from a Loro source (for pre-diffing).
-    /// Only hydrates the key, not the full value — used by LCS list reconciliation.
+    /// Extract the identity key from a Loro source without hydrating the full value.
+    /// Used by movable list reconciliation to match items by key before diffing.
     fn hydrate_key(_source: &ValueOrContainer) -> Result<LoadKey<Self::Key>, ReconcileError> {
         Ok(LoadKey::NoKey)
     }
@@ -63,25 +106,40 @@ pub trait Reconcile {
 // ── Reconciler trait ────────────────────────────────────────────────────
 
 /// Location abstraction for writing into Loro containers.
+///
+/// Implementations include [`PropReconciler`] (writes to a map key or list index)
+/// and [`RootReconciler`] (writes to a document root map).
 pub trait Reconciler {
-    // Scalars
+    /// Write a null value.
     fn null(self) -> Result<(), ReconcileError>;
+    /// Write a boolean.
     fn boolean(self, v: bool) -> Result<(), ReconcileError>;
+    /// Write a 64-bit integer.
     fn i64(self, v: i64) -> Result<(), ReconcileError>;
+    /// Write a 64-bit float.
     fn f64(self, v: f64) -> Result<(), ReconcileError>;
+    /// Write a string.
     fn str(self, v: &str) -> Result<(), ReconcileError>;
+    /// Write binary data.
     fn bytes(self, v: &[u8]) -> Result<(), ReconcileError>;
 
-    // Containers — return typed sub-reconcilers
+    /// Get or create a [`LoroMap`] at this location.
     fn map(self) -> Result<MapReconciler, ReconcileError>;
+    /// Get or create a [`LoroList`] at this location.
     fn list(self) -> Result<ListReconciler, ReconcileError>;
+    /// Get or create a [`LoroMovableList`] at this location.
     fn movable_list(self) -> Result<MovableListReconciler, ReconcileError>;
+    /// Get or create a [`LoroText`] at this location.
     fn text(self) -> Result<TextReconciler, ReconcileError>;
 }
 
 // ── PropReconciler ──────────────────────────────────────────────────────
 
-/// Concrete reconciler that wraps a specific location (map key, list index, etc).
+/// Concrete [`Reconciler`] that writes to a specific location (map key, list index, etc).
+///
+/// Created via factory methods like [`PropReconciler::map_put()`] or
+/// [`PropReconciler::list_insert()`]. Includes no-op detection for scalars —
+/// if the existing value is identical, no CRDT operation is emitted.
 pub struct PropReconciler {
     action: PropAction,
 }
@@ -313,18 +371,34 @@ impl Reconciler for RootReconciler {
 
 // ── Sub-Reconcilers ─────────────────────────────────────────────────────
 
+/// Reconciler for writing fields into a [`LoroMap`].
+///
+/// Obtained via [`Reconciler::map()`]. Use [`entry()`](MapReconciler::entry) to
+/// write fields and [`delete()`](MapReconciler::delete) to remove stale keys.
 pub struct MapReconciler {
     pub map: LoroMap,
 }
 
+/// Reconciler for a [`LoroList`].
+///
+/// Obtained via [`Reconciler::list()`]. Supports `insert()`, `delete()`,
+/// and positional access. Used internally by `Vec<T>` LCS diffing.
 pub struct ListReconciler {
     pub(crate) list: LoroList,
 }
 
+/// Reconciler for a [`LoroMovableList`].
+///
+/// Obtained via [`Reconciler::movable_list()`]. Supports `insert()`, `delete()`,
+/// `set()` (in-place update), and `mov()` (reorder). Used by `#[loro(movable)]` vecs.
 pub struct MovableListReconciler {
     pub(crate) list: LoroMovableList,
 }
 
+/// Reconciler for a [`LoroText`].
+///
+/// Obtained via [`Reconciler::text()`]. Uses Loro's built-in `update()`
+/// which performs LCS diffing to produce minimal insert/delete operations.
 pub struct TextReconciler {
     pub(crate) text: LoroText,
 }

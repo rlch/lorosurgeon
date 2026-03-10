@@ -3,7 +3,8 @@ name = "lorosurgeon-derive"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Derive macros for lorosurgeon"
+description = "Proc-macro crate for lorosurgeon — do not use directly"
+repository = "https://github.com/rlch/lorosurgeon"
 
 [lib]
 proc-macro = true

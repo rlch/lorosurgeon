@@ -1,4 +1,8 @@
-//! MapReconciler — reconcile struct fields and HashMap entries into a LoroMap.
+//! Reconcile struct fields and `HashMap` entries into a [`LoroMap`](loro::LoroMap).
+//!
+//! [`MapReconciler`] provides `entry()`, `delete()`, and `retain()` for
+//! writing fields into a Loro map. It's used by `#[derive(Reconcile)]` for
+//! named structs and by the `HashMap`/`BTreeMap` implementations.
 
 use loro::ValueOrContainer;
 
