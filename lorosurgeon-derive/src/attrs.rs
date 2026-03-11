@@ -20,6 +20,8 @@ pub struct FieldAttrs {
     pub json: bool,
     /// Use LoroMovableList instead of LoroList: `#[loro(movable)]`
     pub movable: bool,
+    /// Use LoroText instead of scalar string: `#[loro(text)]`
+    pub text: bool,
     /// Default when missing: `#[loro(default)]` or `#[loro(default = "fn_name")]`
     pub missing: Option<MissingStrategy>,
     /// Custom module with hydrate/reconcile fns: `#[loro(with = "module")]`
@@ -90,6 +92,8 @@ impl FieldAttrs {
                     result.json = true;
                 } else if meta.path.is_ident("movable") {
                     result.movable = true;
+                } else if meta.path.is_ident("text") {
+                    result.text = true;
                 } else if meta.path.is_ident("default") {
                     // Check if there's a value: `default = "fn_name"`
                     if meta.input.peek(syn::Token![=]) {

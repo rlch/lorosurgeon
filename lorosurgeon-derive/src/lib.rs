@@ -31,6 +31,7 @@ use syn::{parse_macro_input, Data, DeriveInput};
 /// - `#[loro(root = "key")]` — generates `DocSync` impl
 /// - `#[loro(rename = "name")]` — use different Loro key
 /// - `#[loro(json)]` — serde_json round-trip
+/// - `#[loro(text)]` — use `LoroText` with character-level LCS diffing (on `String` fields)
 /// - `#[loro(default)]` — use `Default::default()` when absent
 /// - `#[loro(default = "fn")]` — use custom fn when absent
 /// - `#[loro(with = "module")]` — custom module
@@ -71,6 +72,7 @@ pub fn derive_hydrate(input: TokenStream) -> TokenStream {
 /// - `#[key]` — marks field as identity key for list diffing
 /// - `#[loro(rename = "name")]` — use different Loro key
 /// - `#[loro(json)]` — serde_json round-trip
+/// - `#[loro(text)]` — use `LoroText` with character-level LCS diffing (on `String` fields)
 /// - `#[loro(movable)]` — use `LoroMovableList` instead of `LoroList`
 /// - `#[loro(with = "module")]` — custom module
 /// - `#[loro(reconcile = "fn")]` — custom reconcile fn

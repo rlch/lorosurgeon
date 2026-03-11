@@ -505,18 +505,43 @@ fn test_hashmap_update_removes_old_keys() {
 
 // ── Phase 6: Text type ──────────────────────────────────────────────────
 
-#[test]
-fn test_text_roundtrip() {
-    let doc = LoroDoc::new();
-    let map = doc.get_map("root");
+#[derive(Debug, PartialEq, Hydrate, Reconcile)]
+#[loro(root = "textdoc")]
+struct TextDoc {
+    #[loro(text)]
+    content: String,
+}
 
-    let text = lorosurgeon::Text::new("Hello, world!");
-    let mut mr = MapReconciler { map: map.clone() };
-    mr.entry("content", &text).unwrap();
+#[test]
+fn test_text_attribute_roundtrip() {
+    let doc = LoroDoc::new();
+    let state = TextDoc {
+        content: "Hello, world!".to_string(),
+    };
+    state.to_doc(&doc).unwrap();
     doc.commit();
 
-    let hydrated: lorosurgeon::Text = lorosurgeon::hydrate_prop(&map, "content").unwrap();
-    assert_eq!(hydrated, text);
+    let loaded = TextDoc::from_doc(&doc).unwrap();
+    assert_eq!(loaded, state);
+}
+
+#[test]
+fn test_text_attribute_update() {
+    let doc = LoroDoc::new();
+    let state = TextDoc {
+        content: "Hello".to_string(),
+    };
+    state.to_doc(&doc).unwrap();
+    doc.commit();
+
+    let updated = TextDoc {
+        content: "Hello, world!".to_string(),
+    };
+    updated.to_doc(&doc).unwrap();
+    doc.commit();
+
+    let loaded = TextDoc::from_doc(&doc).unwrap();
+    assert_eq!(loaded, updated);
 }
 
 // ── Phase 7: MaybeMissing ───────────────────────────────────────────────

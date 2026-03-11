@@ -402,3 +402,35 @@ pub struct MovableListReconciler {
 pub struct TextReconciler {
     pub(crate) text: LoroText,
 }
+
+impl TextReconciler {
+    /// Update the text content using Loro's built-in LCS diff.
+    pub fn update(&mut self, new_text: &str) -> Result<(), ReconcileError> {
+        self.text
+            .update(new_text, loro::UpdateOptions::default())
+            .map_err(|_e| ReconcileError::TypeMismatch {
+                expected: "text update",
+                found: "timeout",
+            })?;
+        Ok(())
+    }
+
+    /// Get current text content.
+    pub fn get(&self) -> String {
+        self.text.to_string()
+    }
+}
+
+/// Reconcile a `String` into a [`LoroText`] container at a map key.
+///
+/// Used by `#[loro(text)]` codegen.
+pub fn reconcile_text_prop(
+    value: &str,
+    map: &LoroMap,
+    key: &str,
+) -> Result<(), ReconcileError> {
+    let reconciler = PropReconciler::map_put(map.clone(), key.to_string());
+    let mut t = reconciler.text()?;
+    t.update(value)?;
+    Ok(())
+}

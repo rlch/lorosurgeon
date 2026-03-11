@@ -68,7 +68,8 @@
 //! | `bool` | `Bool` |
 //! | `i8`–`i64`, `u8`–`u64`, `usize` | `I64` (overflow checked on hydration) |
 //! | `f32`, `f64` | `Double` |
-//! | `String` | `String` |
+//! | `String` | `String` (scalar replace) |
+//! | `String` + `#[loro(text)]` | [`LoroText`](loro::LoroText) (character-level LCS) |
 //! | `Vec<u8>` | `Binary` |
 //! | `Option<T>` | `Null` or `T` |
 //! | `Box<T>`, `Cow<T>` | Transparent |
@@ -84,7 +85,6 @@
 //!
 //! # Special Types
 //!
-//! - [`Text`] — plain text backed by [`LoroText`](loro::LoroText) with character-level LCS
 //! - [`ByteArray<N>`](ByteArray) — fixed-size byte array, length-checked on hydration
 //! - [`MaybeMissing<T>`](MaybeMissing) — distinguishes "key absent" from "key present" (unlike `Option`)
 //! - [`VersionGuard`] — captures document version to detect stale-heads before write-back
@@ -100,6 +100,7 @@
 //! - `#[key]` — identity key for [`LoroMovableList`](loro::LoroMovableList) diffing
 //! - `#[loro(rename = "name")]` — use a different key name in Loro
 //! - `#[loro(json)]` — store as JSON string via serde (coarse-grained fallback)
+//! - `#[loro(text)]` — use [`LoroText`](loro::LoroText) with character-level LCS diffing (on `String` fields)
 //! - `#[loro(movable)]` — use [`LoroMovableList`](loro::LoroMovableList) instead of [`LoroList`](loro::LoroList)
 //! - `#[loro(default)]` — use `Default::default()` when key is absent
 //! - `#[loro(default = "fn_name")]` — call a custom function when key is absent
@@ -274,7 +275,6 @@ pub mod reconcile;
 mod byte_array;
 mod doc_sync;
 mod maybe_missing;
-mod text;
 
 // ── Derive macros ─────────────────────────────────────────────────────
 
@@ -294,7 +294,6 @@ pub use crate::error::{HydrateError, ReconcileError};
 
 pub use crate::byte_array::ByteArray;
 pub use crate::maybe_missing::MaybeMissing;
-pub use crate::text::Text;
 
 // ── Helpers for manual use ────────────────────────────────────────────
 
@@ -314,7 +313,7 @@ pub use crate::hydrate::impls::{
 #[doc(hidden)]
 pub use crate::hydrate::{
     hydrate_list_item, hydrate_prop_json, hydrate_prop_json_or_default, hydrate_prop_or,
-    hydrate_prop_or_default, hydrate_prop_or_else,
+    hydrate_prop_or_default, hydrate_prop_or_else, hydrate_text_prop,
 };
 #[doc(hidden)]
 pub use crate::reconcile::list::{reconcile_vec, reconcile_vec_movable, reconcile_vec_simple};
@@ -322,5 +321,6 @@ pub use crate::reconcile::list::{reconcile_vec, reconcile_vec_movable, reconcile
 pub use crate::reconcile::map::reconcile_keyed_map;
 #[doc(hidden)]
 pub use crate::reconcile::{
-    ListReconciler, MovableListReconciler, PropReconciler, RootReconciler, TextReconciler,
+    reconcile_text_prop, ListReconciler, MovableListReconciler, PropReconciler, RootReconciler,
+    TextReconciler,
 };

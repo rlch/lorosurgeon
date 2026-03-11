@@ -78,7 +78,7 @@ pub trait Hydrate: Sized {
         Err(HydrateError::unexpected("other", "movable_list"))
     }
 
-    /// Read from a [`LoroText`]. Override for [`Text`](crate::Text).
+    /// Read from a [`LoroText`]. Used by `#[loro(text)]` fields.
     fn hydrate_text(text: &LoroText) -> Result<Self, HydrateError> {
         let _ = text;
         Err(HydrateError::unexpected("other", "text"))
@@ -202,6 +202,17 @@ pub fn hydrate_prop_json_or_default<T: serde::de::DeserializeOwned + Default>(
         }
         Some(_) => Err(HydrateError::unexpected("string (json)", "other")),
         None => Ok(T::default()),
+    }
+}
+
+/// Hydrate a `String` from a [`LoroText`] container stored in a map key.
+///
+/// Used by `#[loro(text)]` codegen.
+pub fn hydrate_text_prop(map: &LoroMap, key: &str) -> Result<String, HydrateError> {
+    match map.get(key) {
+        Some(ValueOrContainer::Container(Container::Text(t))) => Ok(t.to_string()),
+        Some(_) => Err(HydrateError::unexpected("text", "other")),
+        None => Ok(String::new()),
     }
 }
 

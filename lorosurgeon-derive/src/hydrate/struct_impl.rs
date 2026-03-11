@@ -66,6 +66,10 @@ fn derive_named_struct(name: &Ident, fields: &syn::FieldsNamed) -> syn::Result<T
                     #field_name: lorosurgeon::hydrate_prop_json(map, #loro_key)?,
                 },
             }
+        } else if attrs.text {
+            quote! {
+                #field_name: lorosurgeon::hydrate_text_prop(map, #loro_key)?,
+            }
         } else if attrs.movable {
             // #[loro(movable)] — hydrate Vec<T> from LoroMovableList
             let inner_ty = extract_vec_inner_type(field_ty);

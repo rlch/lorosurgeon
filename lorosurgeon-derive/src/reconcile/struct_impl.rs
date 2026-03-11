@@ -86,6 +86,10 @@ fn derive_named_struct(
                     m.entry(#loro_key, &json_str)?;
                 }
             }
+        } else if attrs.text {
+            quote! {
+                lorosurgeon::reconcile_text_prop(&self.#field_name, &m.map, #loro_key)?;
+            }
         } else if attrs.movable {
             // Use movable list reconciliation
             quote! {

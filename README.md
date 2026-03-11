@@ -53,7 +53,7 @@ The crate docs include type mapping tables, attribute reference, examples for co
 - **`Vec<T>`** → `LoroList` with Myers LCS diffing
 - **`#[loro(movable)]`** → `LoroMovableList` with identity-preserving `mov()`/`set()`
 - **`HashMap<String, V>`** → `LoroMap` with stale-key cleanup
-- **`Text`** → `LoroText` with character-level diffing
+- **`#[loro(text)]`** → `LoroText` with character-level diffing (on `String` fields)
 - **No-op detection** — identical values produce zero CRDT operations
 - **Concurrent merge** — field-level granularity means independent edits compose
 
@@ -67,6 +67,7 @@ The crate docs include type mapping tables, attribute reference, examples for co
 #[key]                         // Identity key for movable list diffing
 #[loro(rename = "name")]       // Different key in Loro
 #[loro(json)]                  // serde_json round-trip
+#[loro(text)]                  // LoroText with character-level LCS
 #[loro(movable)]               // LoroMovableList instead of LoroList
 #[loro(default)]               // Default::default() when absent
 #[loro(default = "fn")]        // Custom default function
