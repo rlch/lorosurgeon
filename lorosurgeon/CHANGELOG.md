@@ -21,6 +21,17 @@ All notable changes to this project will be documented in this file.
 ### Miscellaneous
 
 - release v0.1.1 ([#1](https://github.com/rlch/lorosurgeon/pull/1))
+# Changelog
+
+
+### Miscellaneous
+
+- release v0.1.1 ([#2](https://github.com/rlch/lorosurgeon/pull/2))
+
+### Refactor
+
+- rename #[loro(missing)] attribute to #[loro(default)]
+- replace Text newtype with #[loro(text)] field attribute
 
 ## [0.1.0] - 2026-03-10
 
