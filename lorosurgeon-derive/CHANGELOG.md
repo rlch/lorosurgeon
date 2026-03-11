@@ -8,6 +8,17 @@ All notable changes to this project will be documented in this file.
 
 - add initial changelogs for release-plz
 - comprehensive crate docs, clean public API surface
+# Changelog
+
+
+### Documentation
+
+- add initial changelogs for release-plz
+- comprehensive crate docs, clean public API surface
+
+### Miscellaneous
+
+- release v0.1.1 ([#1](https://github.com/rlch/lorosurgeon/pull/1))
 
 ## [0.1.0] - 2026-03-10
 
