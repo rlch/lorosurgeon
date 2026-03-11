@@ -101,8 +101,8 @@
 //! - `#[loro(rename = "name")]` — use a different key name in Loro
 //! - `#[loro(json)]` — store as JSON string via serde (coarse-grained fallback)
 //! - `#[loro(movable)]` — use [`LoroMovableList`](loro::LoroMovableList) instead of [`LoroList`](loro::LoroList)
-//! - `#[loro(missing)]` — use `Default::default()` when key is absent
-//! - `#[loro(missing = "fn_name")]` — call a custom function when key is absent
+//! - `#[loro(default)]` — use `Default::default()` when key is absent
+//! - `#[loro(default = "fn_name")]` — call a custom function when key is absent
 //! - `#[loro(flatten)]` — inline nested struct fields into parent map
 //! - `#[loro(with = "module")]` — custom hydrate + reconcile via `module::hydrate` / `module::reconcile`
 //! - `#[loro(hydrate = "fn")]` — custom hydrate function only

@@ -163,11 +163,11 @@ fn test_derive_simple_struct() {
 
 #[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
 struct ResourceMeta {
-    #[loro(missing)]
+    #[loro(default)]
     id: String,
     name: String,
     description: Option<String>,
-    #[loro(missing)]
+    #[loro(default)]
     forkable: bool,
 }
 
@@ -307,7 +307,7 @@ struct Theme {
 #[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
 struct WithJson {
     name: String,
-    #[loro(json, missing)]
+    #[loro(json, default)]
     theme: Theme,
 }
 
@@ -1168,12 +1168,12 @@ struct StyleConfig {
 #[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
 #[loro(root = "whiteboard")]
 struct WhiteboardState {
-    #[loro(missing)]
+    #[loro(default)]
     id: String,
     name: String,
     #[loro(rename = "desc")]
     description: Option<String>,
-    #[loro(json, missing)]
+    #[loro(json, default)]
     style: StyleConfig,
     #[loro(flatten)]
     position: Position,
@@ -1979,11 +1979,11 @@ struct FlattenWithMissing {
 
 #[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
 struct PositionWithDefaults {
-    #[loro(missing)]
+    #[loro(default)]
     x: f64,
-    #[loro(missing)]
+    #[loro(default)]
     y: f64,
-    #[loro(missing)]
+    #[loro(default)]
     rotation: f64,
 }
 
@@ -2206,7 +2206,7 @@ fn test_enum_switch_variant() {
 
 #[derive(Debug, Clone, PartialEq, Hydrate, Reconcile)]
 struct BoxedFields {
-    #[loro(missing)]
+    #[loro(default)]
     name: Box<String>,
     value: i64,
 }

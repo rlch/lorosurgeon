@@ -19,7 +19,7 @@ All notable changes to this project will be documented in this file.
 - LCS diffing for `Vec<T>` via Myers algorithm
 - Keyed movable list reconciliation with `mov()`/`set()`
 - `#[loro(root)]` for `DocSync` (to_doc/from_doc)
-- `#[loro(json)]`, `#[loro(rename)]`, `#[loro(missing)]`, `#[loro(flatten)]`
+- `#[loro(json)]`, `#[loro(rename)]`, `#[loro(default)]`, `#[loro(flatten)]`
 - `#[loro(with/hydrate/reconcile)]` custom function attributes
 - `Text` wrapper for character-level LoroText diffing
 - `MaybeMissing<T>` for absent-vs-present tracking

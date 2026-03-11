@@ -68,8 +68,8 @@ The crate docs include type mapping tables, attribute reference, examples for co
 #[loro(rename = "name")]       // Different key in Loro
 #[loro(json)]                  // serde_json round-trip
 #[loro(movable)]               // LoroMovableList instead of LoroList
-#[loro(missing)]               // Default::default() when absent
-#[loro(missing = "fn")]        // Custom default function
+#[loro(default)]               // Default::default() when absent
+#[loro(default = "fn")]        // Custom default function
 #[loro(flatten)]               // Inline nested struct fields
 #[loro(with = "module")]       // Custom hydrate + reconcile
 #[loro(hydrate = "fn")]        // Custom hydrate only

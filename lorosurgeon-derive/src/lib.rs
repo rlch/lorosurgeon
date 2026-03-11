@@ -31,8 +31,8 @@ use syn::{parse_macro_input, Data, DeriveInput};
 /// - `#[loro(root = "key")]` — generates `DocSync` impl
 /// - `#[loro(rename = "name")]` — use different Loro key
 /// - `#[loro(json)]` — serde_json round-trip
-/// - `#[loro(missing)]` — use `Default::default()` when absent
-/// - `#[loro(missing = "fn")]` — use custom fn when absent
+/// - `#[loro(default)]` — use `Default::default()` when absent
+/// - `#[loro(default = "fn")]` — use custom fn when absent
 /// - `#[loro(with = "module")]` — custom module
 /// - `#[loro(hydrate = "fn")]` — custom hydrate fn
 /// - `#[loro(flatten)]` — flatten nested struct fields
