@@ -23,7 +23,7 @@ similar = "2"
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-lorosurgeon-derive = { version = "0.1.0", path = "../lorosurgeon-derive" }
+lorosurgeon-derive = { version = "0.1.1", path = "../lorosurgeon-derive" }
 uuid = { version = "1", optional = true }
 
 [lints]
