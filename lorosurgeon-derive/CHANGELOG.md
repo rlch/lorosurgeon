@@ -42,6 +42,16 @@ All notable changes to this project will be documented in this file.
 
 - rename #[loro(missing)] attribute to #[loro(default)]
 - replace Text newtype with #[loro(text)] field attribute
+# Changelog
+
+
+### Features
+
+- support #[loro(json)] on enum variant fields
+
+### Miscellaneous
+
+- release v0.2.0 ([#4](https://github.com/rlch/lorosurgeon/pull/4))
 
 ## [0.1.0] - 2026-03-10
 
