@@ -120,6 +120,14 @@ pub fn derive_reconcile_enum(input: &DeriveInput, data: &DataEnum) -> syn::Resul
                                         lorosurgeon::reconcile_vec(#field_name, reconciler)?;
                                     }
                                 }
+                            } else if attrs.json {
+                                quote! {
+                                    {
+                                        let json_str: String = serde_json::to_string(#field_name)
+                                            .map_err(lorosurgeon::ReconcileError::from)?;
+                                        inner_map.entry(#loro_key, &json_str)?;
+                                    }
+                                }
                             } else {
                                 quote! {
                                     inner_map.entry(#loro_key, #field_name)?;

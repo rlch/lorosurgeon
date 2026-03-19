@@ -125,6 +125,22 @@ pub fn derive_hydrate_enum(input: &DeriveInput, data: &DataEnum) -> syn::Result<
                                         }
                                     },
                                 }
+                            } else if field_attrs.json {
+                                match &field_attrs.missing {
+                                    Some(crate::attrs::MissingStrategy::Default) => quote! {
+                                        #field_name: lorosurgeon::hydrate_prop_json_or_default(&inner_map, #loro_key)?,
+                                    },
+                                    Some(crate::attrs::MissingStrategy::Function(f)) => {
+                                        let func_path: syn::Path = syn::parse_str(f).unwrap();
+                                        quote! {
+                                            #field_name: lorosurgeon::hydrate_prop_json_or_default(&inner_map, #loro_key)
+                                                .unwrap_or_else(|_| #func_path()),
+                                        }
+                                    }
+                                    None => quote! {
+                                        #field_name: lorosurgeon::hydrate_prop_json(&inner_map, #loro_key)?,
+                                    },
+                                }
                             } else if is_option_type(ty) {
                                 quote! {
                                     #field_name: lorosurgeon::hydrate_prop_or_default(&inner_map, #loro_key)?,
